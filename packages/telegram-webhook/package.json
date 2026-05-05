@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@autonomus/shared": "*",
     "@octokit/rest": "^21.0.2",
     "next": "^16.0.0",
     "react": "^19.0.0",
