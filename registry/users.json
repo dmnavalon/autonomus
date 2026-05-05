@@ -3,10 +3,10 @@
   "version": 1,
   "users": [
     {
-      "chat_id": null,
+      "chat_id": 8676856542,
       "username": "dmnavalon",
       "role": "owner",
-      "notes": "Diego Martínez — replace null with your real Telegram chat_id after sending /start to the bot."
+      "notes": "Diego Martínez — captured 2026-05-05"
     }
   ]
 }
