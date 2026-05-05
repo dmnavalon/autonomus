@@ -15,12 +15,10 @@
     "test": "vitest run --reporter=basic"
   },
   "dependencies": {
-    "@autonomus/shared": "*",
+    "@ai-sdk/gateway": "^3.0.0",
     "@octokit/rest": "^21.0.2",
     "ai": "^6.0.0",
     "dotenv": "^16.4.5",
-    "octokit": "^4.0.2",
-    "pino": "^9.4.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

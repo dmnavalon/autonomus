@@ -1,0 +1,52 @@
+name: Orchestrator
+
+# Triggered when:
+#   - The Telegram webhook creates a new Issue (label state:received via "opened").
+#   - The Coordinator transitions a job back to a runnable state (state:retesting).
+#
+# Phase 3 covers state:received → state:planning. Phase 4+ extends.
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: autonomus-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: |
+      github.event.issue != null && (
+        contains(github.event.issue.labels.*.name, 'state:received') ||
+        contains(github.event.issue.labels.*.name, 'state:retesting')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Build orchestrator
+        run: npm run build --workspace=@autonomus/orchestrator
+
+      - name: Run job
+        env:
+          GH_AUTOMATION_TOKEN: ${{ secrets.GH_AUTOMATION_TOKEN }}
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          FACTORY_REPO: dmnavalon/autonomus
+          MAX_JOB_INPUT_TOKENS: '80000'
+          MAX_JOB_OUTPUT_TOKENS: '15000'
+          MAX_JOB_COST_USD: '2.00'
+        run: node packages/orchestrator/dist/index.js run-job ${{ github.event.issue.number }}
