@@ -1,0 +1,12 @@
+{
+  "$schema": "./users.schema.json",
+  "version": 1,
+  "users": [
+    {
+      "chat_id": null,
+      "username": "dmnavalon",
+      "role": "owner",
+      "notes": "Diego Martínez — replace null with your real Telegram chat_id after sending /start to the bot."
+    }
+  ]
+}

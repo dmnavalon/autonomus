@@ -1,0 +1,29 @@
+{
+  "name": "autonomus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Software Factory Agent — Telegram → GitHub PR via multi-agent pipeline",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run --reporter=basic",
+    "test:factory": "vitest run tests/factory --reporter=basic",
+    "test:watch": "vitest",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AutonomusUsersRegistry",
+  "type": "object",
+  "required": ["version", "users"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "users": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["chat_id", "username", "role"],
+        "properties": {
+          "chat_id": { "type": ["integer", "null"] },
+          "username": { "type": "string" },
+          "role": { "type": "string", "enum": ["owner", "developer", "viewer"] },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}

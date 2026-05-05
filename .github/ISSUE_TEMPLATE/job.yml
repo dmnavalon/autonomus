@@ -1,0 +1,36 @@
+name: "Job (manual)"
+description: "Manually create a job (most jobs come from Telegram automatically)."
+labels: ["state:received", "source:manual"]
+body:
+  - type: textarea
+    id: request
+    attributes:
+      label: "Solicitud (en español, lenguaje natural)"
+      description: "Describe lo que quieres en una o dos frases."
+      placeholder: "Ejemplo: No funciona cerrar sesión en mi-app"
+    validations:
+      required: true
+  - type: input
+    id: app_slug
+    attributes:
+      label: "App slug (si aplica)"
+      description: "El slug de la app destino, según registry/apps.json. Déjalo vacío si es software_nuevo."
+      placeholder: "mi-app"
+    validations:
+      required: false
+  - type: dropdown
+    id: hint_type
+    attributes:
+      label: "Tipo (si lo conoces; opcional)"
+      description: "El Clasificador puede sobreescribir esto."
+      options:
+        - ""
+        - software_nuevo
+        - feature
+        - bug
+        - cambio_visual
+        - qa_only
+        - refactor
+        - pregunta
+    validations:
+      required: false
