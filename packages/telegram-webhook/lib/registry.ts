@@ -135,17 +135,19 @@ export async function getLastActiveSlug(chatId: number): Promise<string | null> 
   return u?.last_active_slug ?? null;
 }
 
-export async function setLastActiveSlug(chatId: number, slug: string): Promise<void> {
+export async function setLastActiveSlug(chatId: number, slug: string | null): Promise<void> {
   const { content, sha } = await ghContents<UsersRegistry>('registry/users.json');
   const idx = content.users.findIndex((x) => x.chat_id === chatId);
   if (idx === -1) throw new Error(`chat_id ${chatId} not in registry/users.json`);
-  if (content.users[idx]!.last_active_slug === slug) return; // no-op
+  if ((content.users[idx]!.last_active_slug ?? null) === slug) return; // no-op
   content.users[idx] = { ...content.users[idx]!, last_active_slug: slug };
   await ghPut(
     'registry/users.json',
     content,
     sha,
-    `chore(registry): set last_active_slug=${slug} for chat_id=${chatId}`,
+    slug
+      ? `chore(registry): set last_active_slug=${slug} for chat_id=${chatId}`
+      : `chore(registry): clear last_active_slug for chat_id=${chatId}`,
   );
   usersCache = null;
 }

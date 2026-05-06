@@ -93,11 +93,19 @@ export async function editMessageText(
 /**
  * Prepends a project header to every user-facing message. If `slug` is null,
  * indicates no active project (selection pending or onboarding).
+ *
+ * When a project is active, a small footer explains how to switch or exit so
+ * users never feel locked in.
  */
 export function withHeader(slug: string | null, body: string): string {
   const header =
     slug === null
-      ? '📁 *Proyecto:* (sin elegir)'
-      : `📁 *Proyecto:* \`${slug}\``;
-  return `${header}\n\n${body}`;
+      ? '📁 Proyecto: (sin elegir)'
+      : `📁 Proyecto: ${slug}`;
+  if (slug === null) {
+    return `${header}\n\n${body}`;
+  }
+  const footer =
+    '\n\n(Salir del proyecto: /out | Cambiar: /use nombre | Ver todos: /apps | Nuevo: /new)';
+  return `${header}\n\n${body}${footer}`;
 }

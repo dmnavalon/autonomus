@@ -138,6 +138,12 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
     return Response.json({ ok: true, mode: 'wizard-text' });
   }
 
+  // /new — starts the create-project wizard regardless of active sticky
+  if (text === '/new') {
+    await applyFlow(chatId, await startCreateWizard(chatId));
+    return Response.json({ ok: true, mode: 'wizard-create' });
+  }
+
   // Slash commands (auth required)
   const cmd = await dispatchCommand(text, chatId, username);
   if (cmd) {
@@ -145,6 +151,17 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
       replyMarkup: cmd.replyMarkup,
     });
     return Response.json({ ok: true, mode: 'command' });
+  }
+
+  // Chitchat filter — greetings, thanks, short acks don't create Issues.
+  const chitchat = classifyChitchat(text);
+  if (chitchat) {
+    const sticky = await import('@/lib/registry').then((m) => m.getLastActiveSlug(chatId));
+    const reply = sticky
+      ? `${chitchat} Estás en el proyecto *${sticky}*. Cuando quieras pedirme algo, escríbelo directamente.`
+      : `${chitchat} Cuando quieras empezar, dime qué necesitas o usa /new para crear un proyecto.`;
+    await sendMessage(chatId, withHeader(sticky, reply));
+    return Response.json({ ok: true, mode: 'chitchat' });
   }
 
   // Free-text message — software_nuevo intent shortcut (no project resolution needed).
@@ -212,6 +229,38 @@ function looksLikeSoftwareNuevo(text: string): boolean {
   return /\b(quiero una app|crear una app|nueva aplicaci[oó]n|crear app nueva|app que detect[eé]|app para)\b/i.test(
     text,
   );
+}
+
+/**
+ * Detects messages that are social/meta (greetings, thanks, acks, bot questions)
+ * and should NOT create a GitHub Issue. Returns a short reply string if chitchat,
+ * or null if the message looks like a real task request.
+ */
+function classifyChitchat(text: string): string | null {
+  const t = text.trim().toLowerCase();
+
+  // Very short messages with no actionable verb are almost always chitchat
+  if (t.split(/\s+/).length <= 2) {
+    if (/^(hola|buenas|hey|hi|hello|buen\s?d[ií]a|buenos\s?d[ií]as|buenas\s?tardes|buenas\s?noches|qu[eé]\s?tal|c[oó]mo\s?est[aá]s?)/.test(t)) {
+      return '👋 Hola!';
+    }
+    if (/^(gracias|thanks|ok\s?gracias|muchas\s?gracias|thx|genial|perfecto|dale|listo|entendido|de\s?acuerdo|claro|ok|okay|bien|chevere|chévere|excelente|nominal)$/.test(t)) {
+      return '👍';
+    }
+    if (/^(adi[oó]s|chau|bye|hasta\s?luego|hasta\s?pronto|nos\s?vemos|ciao)/.test(t)) {
+      return '👋 Hasta luego!';
+    }
+    if (/^(s[ií]|no|nop|nope|yep|yup)$/.test(t)) {
+      return '👍 Entendido.';
+    }
+  }
+
+  // Longer meta-questions about the bot
+  if (/\b(qu[eé]\s+puedes\s+hacer|para\s+qu[eé]\s+sirves|c[oó]mo\s+funciona[sz]?|qu[eé]\s+eres|ayuda\s+con\s+qu[eé])\b/.test(t)) {
+    return '🤖 Soy tu fábrica de software. Descríbeme qué necesitas hacer en tu proyecto y lo convierto en un PR listo para revisar. Usa /help para ver los comandos disponibles.';
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------

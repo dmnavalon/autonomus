@@ -45,7 +45,7 @@ export async function handleApps(chatId: number): Promise<CommandResult> {
     return `${marker} *${display}*`;
   });
   return {
-    text: ['*Tus proyectos:*', '', ...lines, '', 'Para cambiar el activo, escribí `/use <nombre>`.'].join('\n'),
+    text: ['*Tus proyectos:*', '', ...lines, '', 'Cambiar activo: `/use <nombre>` — Crear nuevo: `/new`'].join('\n'),
     headerSlug: sticky,
   };
 }
@@ -96,6 +96,8 @@ export async function handleHelp(chatId: number): Promise<CommandResult> {
       '*Comandos:*',
       '`/apps` — lista tus proyectos',
       '`/use <nombre>` — cambia el proyecto activo',
+      '`/out` — salir del proyecto activo',
+      '`/new` — crea un proyecto nuevo (asistente)',
       '`/current` — muestra el proyecto activo',
       '`/cancel` — aborta el asistente actual (si hay uno activo)',
       '`/help` — esta ayuda',
@@ -108,6 +110,15 @@ export async function handleHelp(chatId: number): Promise<CommandResult> {
     ].join('\n'),
     headerSlug: sticky,
   };
+}
+
+export async function handleOut(chatId: number): Promise<CommandResult> {
+  const sticky = await getLastActiveSlug(chatId);
+  if (!sticky) {
+    return { text: 'No estás en ningún proyecto.', headerSlug: null };
+  }
+  await setLastActiveSlug(chatId, null);
+  return { text: `Saliste del proyecto ${sticky}. Puedes elegir otro con /apps o crear uno con /new.`, headerSlug: null };
 }
 
 export async function handleCancel(chatId: number): Promise<CommandResult> {
@@ -195,14 +206,19 @@ export async function dispatchCommand(
       return handleCurrent(chatId);
     case '/help':
       return handleHelp(chatId);
+    case '/out':
+    case '/exit':
+    case '/salir':
+      return handleOut(chatId);
     case '/cancel':
       return handleCancel(chatId);
     case '/link':
       return handleLink(chatId, args, username);
+    case '/new':
     case '/start':
     case '/id':
     case '/whoami':
-      return null; // delegated to webhook (onboarding response)
+      return null; // delegated to webhook (onboarding response / flow)
     default:
       return { text: `Comando desconocido: \`${cmd}\`. Usá \`/help\`.`, headerSlug: null };
   }

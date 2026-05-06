@@ -57,18 +57,34 @@ export async function welcomeMessage(
   pendingIssueNumber: number,
 ): Promise<FlowResult> {
   const apps = await getLinkedApps(chatId);
-  const lines: string[] = [];
+
+  let body: string;
   if (apps.length === 0) {
-    lines.push('No tienes proyectos vinculados todavía. ¿Qué quieres hacer?');
+    body = [
+      'Hola 👋 Aún no tienes proyectos.',
+      '',
+      'Puedes:',
+      '• Crear uno nuevo → /new',
+      '• Vincular un repo de GitHub → pulsa el botón de abajo',
+    ].join('\n');
   } else {
-    lines.push('¿Sobre qué proyecto quieres trabajar?');
-    lines.push('');
-    lines.push('Si ya tienes proyectos, elige uno de la lista. Si no, puedes crear uno o vincular un repo de GitHub.');
+    const appList = apps.map((a) => `• ${appDisplayName(a)}`).join('\n');
+    body = [
+      'Hola 👋 No estás en ningún proyecto.',
+      '',
+      'Tus proyectos:',
+      appList,
+      '',
+      'Elige uno arriba, o:',
+      '• /use nombre — entrar a un proyecto',
+      '• /new — crear uno nuevo',
+    ].join('\n');
   }
+
   return {
     messages: [
       {
-        text: withHeader(null, lines.join('\n')),
+        text: withHeader(null, body),
         headerSlug: null,
         replyMarkup: buildWelcomeKeyboard(apps, pendingIssueNumber),
       },
