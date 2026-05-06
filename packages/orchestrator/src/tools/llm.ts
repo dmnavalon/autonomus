@@ -32,10 +32,13 @@ export interface LlmCallOutput<T> {
 
 export async function callAgentLLM<T>(input: LlmCallInput<T>): Promise<LlmCallOutput<T>> {
   const cap = AGENT_CAPS[input.agent];
-  const approxInputTokens = Math.ceil(
-    (input.systemPrefix.length + input.userInput.length) / 4,
-  );
-  if (approxInputTokens > cap.inputTokens) {
+  // Cap applies to the variable user input only; the systemPrefix
+  // (shared/system + shared/safety + agents/<n>/instructions.md) is stable across
+  // calls and cached by the provider (Anthropic ephemeral, OpenAI auto), so it
+  // amortises to ~10% effective cost. Counting it here would double-charge
+  // the very thing prompt-caching is designed to make cheap.
+  const approxUserInputTokens = Math.ceil(input.userInput.length / 4);
+  if (approxUserInputTokens > cap.inputTokens) {
     throw new BudgetExceededError('agent_input');
   }
 
