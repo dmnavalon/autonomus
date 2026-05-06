@@ -10,7 +10,7 @@
  */
 
 const FACTORY_REPO = process.env.FACTORY_REPO ?? 'dmnavalon/autonomus';
-const TTL_MS = 30 * 60_000;
+const TTL_MS = 2 * 60 * 60_000; // 2 hours
 const CACHE_TTL_MS = 30_000;
 
 export type WizardKind = 'create-project' | 'link-repo';
