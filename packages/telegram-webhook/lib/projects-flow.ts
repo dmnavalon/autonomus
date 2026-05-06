@@ -23,7 +23,11 @@ import {
   type WizardState,
   type WizardStep,
 } from './conversation-state';
-import { getLinkedApps, type RegistryApp } from './registry';
+import {
+  __resetRegistryCache,
+  getLinkedApps,
+  type RegistryApp,
+} from './registry';
 import { listLinkableRepos, type RepoCandidate } from './github-repos';
 import { openCreateProjectPR, openLinkAppPR } from './github-issue';
 import { nameToSlug } from './slug-generator';
@@ -212,6 +216,10 @@ export async function executeCreateConfirm(
       username,
     });
     await clearWizard(state.chat_id);
+    if (result.pr.merged) __resetRegistryCache();
+    const mergeLine = result.pr.merged
+      ? '✅ Linkeo activado (PR auto-mergeado). Ya puedes pedirme cosas sobre este proyecto.'
+      : `⚠️ El PR no se auto-mergeó (${result.pr.mergeError ?? 'desconocido'}). Mergéalo a mano para activar el linkeo.`;
     return {
       messages: [
         {
@@ -223,7 +231,7 @@ export async function executeCreateConfirm(
               `Repo: ${result.repoUrl}`,
               `PR de registro: [#${result.pr.number}](${result.pr.url})`,
               '',
-              'Mergea el PR para activar el linkeo. El bot lo detecta en ~60s.',
+              mergeLine,
             ].join('\n'),
           ),
           headerSlug: state.draft.slug,
@@ -405,17 +413,21 @@ export async function executeLinkLabel(
       username,
     });
     await clearWizard(state.chat_id);
+    if (pr.merged) __resetRegistryCache();
+    const mergeLine = pr.merged
+      ? '✅ Linkeo activado (PR auto-mergeado). Ya puedes pedirme cosas sobre este proyecto.'
+      : `⚠️ El PR no se auto-mergeó (${pr.mergeError ?? 'desconocido'}). Mergéalo a mano para activar el linkeo.`;
     return {
       messages: [
         {
           text: withHeader(
             slug,
             [
-              `✅ PR abierto para vincular \`${state.draft.repo}\` como *${label}*.`,
+              `✅ Vinculado \`${state.draft.repo}\` como *${label}*.`,
               '',
               `PR de registro: [#${pr.number}](${pr.url})`,
               '',
-              'Mergea el PR para activar el linkeo. El bot lo detecta en ~60s.',
+              mergeLine,
             ].join('\n'),
           ),
           headerSlug: slug,

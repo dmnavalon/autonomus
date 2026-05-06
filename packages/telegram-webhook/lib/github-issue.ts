@@ -174,6 +174,31 @@ async function createBranchFromMain(branchName: string): Promise<void> {
 }
 
 /**
+ * Auto-merges a registry-PR opened by the wizard. The PR is the audit trail
+ * (commit message + author + diff visible in GitHub history); the merge step
+ * itself is mechanical and shouldn't block the user.
+ *
+ * Requires GH_AUTOMATION_TOKEN to have `contents: write` and the user to NOT
+ * have branch protection blocking direct merges by themselves. If the merge
+ * fails (protected branch, conflicts), the caller falls back to "manual merge".
+ */
+async function autoMergePR(prNumber: number): Promise<{ merged: boolean; reason?: string }> {
+  const o = getOctokit();
+  try {
+    await o.pulls.merge({
+      owner: FACTORY_OWNER,
+      repo: FACTORY_REPO_NAME,
+      pull_number: prNumber,
+      merge_method: 'squash',
+    });
+    return { merged: true };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'unknown';
+    return { merged: false, reason: detail.slice(0, 200) };
+  }
+}
+
+/**
  * Opens a PR on dmnavalon/autonomus that adds a new entry to registry/apps.json.
  * Used by /link command and the conversational link wizard.
  */
@@ -183,7 +208,7 @@ export async function openLinkAppPR(args: {
   repo: string;
   ownerChatId: number;
   username: string | undefined;
-}): Promise<{ number: number; url: string }> {
+}): Promise<{ number: number; url: string; merged: boolean; mergeError?: string }> {
   const o = getOctokit();
   const branchName = `registry/link-${args.slug}-${Date.now()}`;
   await createBranchFromMain(branchName);
@@ -228,11 +253,17 @@ export async function openLinkAppPR(args: {
       `- owner_chat_id: \`${args.ownerChatId}\``,
       `- requested_by: ${args.username ?? '(unknown username)'}`,
       '',
-      'Mergea este PR para activar el linkeo. El cache del webhook expira ~60s después.',
+      'Auto-merged by the wizard. PR remains as audit trail.',
     ].join('\n'),
   });
 
-  return { number: pr.data.number, url: pr.data.html_url };
+  const merge = await autoMergePR(pr.data.number);
+  return {
+    number: pr.data.number,
+    url: pr.data.html_url,
+    merged: merge.merged,
+    ...(merge.reason ? { mergeError: merge.reason } : {}),
+  };
 }
 
 /**
@@ -251,7 +282,10 @@ export async function openCreateProjectPR(args: {
   type: 'web' | 'saas' | 'dashboard' | 'bot' | 'api' | 'otro';
   ownerChatId: number;
   username: string | undefined;
-}): Promise<{ repoUrl: string; pr: { number: number; url: string } }> {
+}): Promise<{
+  repoUrl: string;
+  pr: { number: number; url: string; merged: boolean; mergeError?: string };
+}> {
   const o = getOctokit();
 
   const repo = await o.repos.createForAuthenticatedUser({
@@ -312,14 +346,20 @@ export async function openCreateProjectPR(args: {
       `- owner_chat_id: \`${args.ownerChatId}\``,
       `- requested_by: ${args.username ?? '(unknown username)'}`,
       '',
-      'Mergea este PR para activar el linkeo en el bot. El repo ya está creado.',
+      'Auto-merged by the wizard. PR remains as audit trail. Repo already created.',
     ]
       .filter((l): l is string => l !== null)
       .join('\n'),
   });
 
+  const merge = await autoMergePR(pr.data.number);
   return {
     repoUrl: repo.data.html_url,
-    pr: { number: pr.data.number, url: pr.data.html_url },
+    pr: {
+      number: pr.data.number,
+      url: pr.data.html_url,
+      merged: merge.merged,
+      ...(merge.reason ? { mergeError: merge.reason } : {}),
+    },
   };
 }
