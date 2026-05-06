@@ -5,7 +5,7 @@
     {
       "chat_id": 8676856542,
       "wizard": "link-repo",
-      "step": "pick-gh",
+      "step": "label",
       "draft": {
         "candidates": [
           {
@@ -89,10 +89,11 @@
             "name": "pruebasGIT"
           }
         ],
-        "page": 0
+        "page": 0,
+        "repo": "dmnavalon/dashboard-saas-faind"
       },
       "started_at": "2026-05-06T19:23:45.880Z",
-      "expires_at": "2026-05-06T19:53:45.880Z"
+      "expires_at": "2026-05-06T19:53:48.594Z"
     }
   ]
 }
