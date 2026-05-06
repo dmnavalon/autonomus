@@ -12,6 +12,7 @@ export interface AgentCap {
 }
 
 export const AGENT_CAPS: Record<AgentName, AgentCap> = {
+  // Phase-3 LLM agents
   recepcionista: { inputTokens: 2_000, outputTokens: 300 },
   clasificador: { inputTokens: 1_500, outputTokens: 200 },
   planificador: { inputTokens: 4_000, outputTokens: 800 },
@@ -24,6 +25,14 @@ export const AGENT_CAPS: Record<AgentName, AgentCap> = {
   analista_logs: { inputTokens: 6_000, outputTokens: 500 },
   reparador: { inputTokens: 12_000, outputTokens: 3_000 },
   verificador: { inputTokens: 1_500, outputTokens: 200 },
+  // Doc-maestro additions
+  coordinador:           { inputTokens: 0,     outputTokens: 0 }, // deterministic
+  protocol_binder:       { inputTokens: 4_000, outputTokens: 600 },
+  github_operator:       { inputTokens: 0,     outputTokens: 0 }, // deterministic
+  telegram_notifier:     { inputTokens: 0,     outputTokens: 0 }, // deterministic
+  factory_evaluator:     { inputTokens: 6_000, outputTokens: 1_000 },
+  security_scope_guard:  { inputTokens: 4_000, outputTokens: 400 }, // LLM tiebreaker rare
+  prompt_change_manager: { inputTokens: 4_000, outputTokens: 600 },
 };
 
 export const JOB_BUDGET = {

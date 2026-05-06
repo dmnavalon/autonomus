@@ -20,6 +20,7 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
 
 const AGENT_DIR: Record<AgentName, string> = {
+  // Phase-3 agents
   recepcionista:   '01-recepcionista',
   clasificador:    '02-clasificador',
   planificador:    '03-planificador',
@@ -32,6 +33,14 @@ const AGENT_DIR: Record<AgentName, string> = {
   analista_logs:   '10-analista-logs',
   reparador:       '11-reparador',
   verificador:     '12-verificador-final',
+  // Doc-maestro additions
+  coordinador:           '13-coordinador',
+  protocol_binder:       '14-protocol-binder',
+  github_operator:       '15-github-operator',
+  telegram_notifier:     '16-telegram-notifier',
+  factory_evaluator:     '17-factory-evaluator',
+  security_scope_guard:  '18-security-scope-guard',
+  prompt_change_manager: '19-prompt-change-manager',
 };
 
 const cache = new Map<string, string>();

@@ -1,0 +1,84 @@
+# Runs the Playwright suite against a Vercel Preview when a deployment becomes ready.
+# Reference: agents/09-playwright/instructions.md (`agent_id: 12_playwright_agent`).
+name: qa-playwright
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      preview_url:
+        description: Vercel Preview URL to test against
+        required: true
+      issue_number:
+        description: GitHub Issue (job) number
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  deployments: read
+
+jobs:
+  run-e2e:
+    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && contains(github.event.deployment_status.environment_url, 'vercel.app'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E vs preview
+        env:
+          PREVIEW_URL: ${{ github.event.deployment_status.environment_url || inputs.preview_url }}
+        run: npx playwright test --reporter=list,json
+        continue-on-error: true
+
+      - name: Upload artifacts on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
+      - name: Post results comment
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          ISSUE: ${{ inputs.issue_number || github.event.deployment_status.deployment.payload.issue_number }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const issue_number = parseInt(process.env.ISSUE || '0', 10);
+            if (!issue_number) return;
+            let payload = { estado: 'failed', totales: { ran: 0, passed: 0, failed: 0, skipped: 0 }, fallos: [], duration_ms: 0 };
+            try {
+              const raw = fs.readFileSync('playwright-report/results.json', 'utf8');
+              const r = JSON.parse(raw);
+              const stats = r.stats || {};
+              payload = {
+                estado: (stats.unexpected ?? 0) === 0 ? 'passed' : 'failed',
+                totales: {
+                  ran: stats.expected + stats.unexpected + stats.skipped,
+                  passed: stats.expected,
+                  failed: stats.unexpected,
+                  skipped: stats.skipped,
+                },
+                fallos: (r.suites || []).flatMap(s => (s.specs || []).flatMap(sp => (sp.tests || []).filter(t => t.results?.some(x => x.status === 'failed')).map(t => ({ nombre: t.title, error_resumen: (t.results.find(x => x.status === 'failed')?.error?.message || '').slice(0,200), trace_artifact: `playwright-report-${process.env.GITHUB_RUN_ID}` })))),
+                duration_ms: r.duration ?? 0,
+              };
+            } catch (e) { /* leave default failed payload */ }
+            const body = ['### 🧪 Playwright run', '', '```json', JSON.stringify(payload, null, 2), '```'].join('\n');
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number, body });

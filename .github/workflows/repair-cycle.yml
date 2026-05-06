@@ -1,0 +1,67 @@
+# Triggered by analista_logs when tipo_error=producto. Re-invokes the orchestrator
+# in repair mode for an Issue. Cap: 5 repair cycles (enforced by Coordinator).
+# Reference: agents/11-reparador/instructions.md (`agent_id: 14_repair_agent`).
+name: repair-cycle
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: GitHub Issue (job) number
+        required: true
+      attempt:
+        description: Repair attempt counter (1..5)
+        required: true
+        default: "1"
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Cap check
+        run: |
+          ATTEMPT="${{ inputs.attempt }}"
+          if [ "$ATTEMPT" -gt 5 ]; then
+            echo "max_repair_cycles_reached"
+            exit 1
+          fi
+
+      - name: Run orchestrator (repair mode)
+        env:
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          REPAIR_ATTEMPT: ${{ inputs.attempt }}
+          GH_AUTOMATION_TOKEN: ${{ secrets.GH_AUTOMATION_TOKEN }}
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+        run: npm run --workspace @autonomus/orchestrator start
+
+      - name: Bump repair label
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          ISSUE: ${{ inputs.issue_number }}
+          ATTEMPT: ${{ inputs.attempt }}
+        with:
+          script: |
+            const issue_number = parseInt(process.env.ISSUE, 10);
+            const next = parseInt(process.env.ATTEMPT, 10) + 1;
+            const label = next <= 5 ? `repair:${next}` : null;
+            const { data: cur } = await github.rest.issues.listLabelsOnIssue({ ...context.repo, issue_number });
+            const without = cur.filter(l => !l.name.startsWith('repair:')).map(l => l.name);
+            const set = label ? [...without, label] : without;
+            await github.rest.issues.setLabels({ ...context.repo, issue_number, labels: set });
