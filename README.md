@@ -8,33 +8,50 @@ The factory **never** auto-merges to `main`, **never** deploys to production, **
 
 ---
 
-## Architecture in one paragraph
+## End-to-end flow
 
-A small Vercel Function (`packages/telegram-webhook`) receives Telegram updates, validates the user, and creates a GitHub Issue in `dmnavalon/autonomus`. The Issue is the **job**; its labels (`state:*`, `type:*`, `repair:*`) are the state machine. A GitHub Actions workflow (`.github/workflows/orchestrator.yml`) runs the orchestrator (`packages/orchestrator`), a TypeScript pipeline of 13 mini-agents whose instructions live as versioned markdown files in `agents/`. Each agent calls a model through Vercel AI Gateway with a hard token cap, posts a structured comment back to the Issue, and transitions the label. Code lands on a `factory/<n>` branch, opens a PR, waits for Vercel Preview, runs Playwright on it, repairs if needed, and notifies the user via Telegram when the PR is human-review ready.
+```
+Telegram message
+   │
+   ▼
+Vercel webhook (autonomus-telegram-webhook.vercel.app)
+   │  · auth: TELEGRAM_WEBHOOK_SECRET
+   │  · authorization: registry/users.json
+   │  · resolves active project (sticky / inline keyboard / onboarding)
+   │  · creates GitHub Issue with state:received + source:telegram
+   │
+   ▼
+GitHub Actions: orchestrator.yml on issues.opened|labeled
+   │
+   ▼
+Coordinator (deterministic state machine)
+   │
+   │  ── Recepcionista (cheap LLM)        — clean text + initial intent
+   │  ── Clasificador (cheap LLM)         — tipo, complejidad, riesgo
+   │  ── Planificador (mid LLM)           — objective + acceptance criteria
+   │  ── Arquitecto (mid/strong LLM)      — files + plan + risks
+   │  ── Programador (strong LLM)         — file edits + commit/PR text
+   │  ── GithubOperator (deterministic)   — preflight + commit + open PR
+   │  ── waitForBranchDeployment (Vercel) — polls until preview READY
+   │  ── QA Planner (cheap LLM)           — test plan
+   │  ── Playwright generation + inline run — E2E against preview
+   │
+   │  if pass:
+   │    ── Verificador (deterministic)    — checklist
+   │    ── Telegram notify (canonical msg)
+   │
+   │  if fail:
+   │    ── Analista de Logs (mid LLM)     — diagnose tipo_error
+   │    ── Reparador (strong LLM)         — file edits to fix
+   │    ── commit + waitForBranchDeployment + retest (≤ 5 cycles)
+   │
+   ▼
+Issue ends in state:human-review-required or state:failed-needs-human
+```
 
----
-
-## Mini-agents (13)
-
-| # | Agent | Model tier | Input cap | Output cap |
-|---|-------|------------|-----------|------------|
-| 1 | Recepcionista (Telegram intake) | cheap | 2k | 300 |
-| 2 | Clasificador | cheap | 1.5k | 200 |
-| 3 | Planificador / PM | mid | 4k | 800 |
-| 4 | Arquitecto Técnico | mid | 6k | 1.2k |
-| 5 | Router de Modelos | (deterministic, no LLM) | — | — |
-| 6 | Programador | strong | 16k | 4k |
-| 7 | Revisor de Código | mid | 8k | 600 |
-| 8 | QA Planner | cheap | 3k | 600 |
-| 9 | Playwright runner | (no LLM at runtime) | — | — |
-| 10 | Analista de Logs | mid | 6k | 500 |
-| 11 | Reparador | strong | 12k | 3k |
-| 12 | Verificador Final | cheap | 1.5k | 200 |
-| 13 | Coordinador | (deterministic, no LLM) | — | — |
-
-Per-job hard cap: **80k input + 15k output tokens, ≤ $2 USD**. Exceeded → label `cost:over-budget` and stop.
-
-See [docs/architecture.md](docs/architecture.md) for the full picture.
+Every step is a comment on the Issue. The final telemetry comment shows
+`total_input_tokens`, `total_output_tokens`, `total_cached_tokens`,
+`total_cost_usd`, all bounded by the per-job cap of $2 USD.
 
 ---
 
@@ -43,7 +60,7 @@ See [docs/architecture.md](docs/architecture.md) for the full picture.
 ```
 state:received
   → state:classifying → state:planning → state:coding
-  → state:pr-created → state:waiting-preview → state:preview-ready
+  → state:pr-created  → state:waiting-preview → state:preview-ready
   → state:qa-planning → state:qa-running
   ├─ ok  → state:auto-approved → state:human-review-required
   └─ fail → state:qa-failed → state:repairing (label repair:N, N≤5)
@@ -53,116 +70,141 @@ state:received
 
 ---
 
-## Repository layout
+## 19 agents + 20 protocols
 
-```
-autonomus/
-├── agents/             # 13 mini-agent instruction files (versioned prompts)
-├── prompts/shared/     # System / safety / json-schemas (cacheable prompt prefix)
-├── flows/              # 6 flow recipes (software_nuevo, feature, bug, …)
-├── packages/
-│   ├── orchestrator/   # Node/TS pipeline (CLI entrypoint for GH Actions)
-│   ├── telegram-webhook/ # Next.js App Router → Vercel Function
-│   └── shared/         # Shared types / schemas / prompt loader
-├── registry/           # users.json, apps.json (operational data, versioned)
-├── templates/nextjs-vercel-app/ # Template repo for `software_nuevo`
-├── tests/factory/      # Vitest tests of the factory itself (14 tests)
-├── .github/workflows/  # orchestrator, qa-playwright, repair-cycle, factory-tests
-├── docs/               # architecture, runbook, env-vars, ADRs
-├── package.json        # npm workspaces
-├── tsconfig.base.json
-├── playwright.config.ts
-└── vercel.ts
-```
+The factory has **19 agents** (13 LLM-backed + 6 deterministic) governed by **20 protocols** (auditable rules versioned in `protocols/`). The full catalog lives in `docs/agents_overview.md` and `agents/00_agent_manifest.yml`.
+
+Per-agent token caps and per-job cost ceiling are enforced in `packages/orchestrator/src/budget.ts`.
 
 ---
 
 ## Setup (first time)
 
-### 1. Prerequisites
+### Pre-requisites
 
 - Node.js ≥ 20
 - npm ≥ 10
-- GitHub CLI (`gh`) authenticated as `dmnavalon`
-- Vercel CLI authenticated (`vercel login`)
+- `gh` CLI authenticated as `dmnavalon`
+- `vercel` CLI authenticated
 - A Telegram bot token (create via @BotFather)
+- An AI Gateway key (Vercel AI dashboard, requires credit card to unlock free credits)
 
-### 2. Install dependencies
+### Bootstrap (one-time)
 
 ```bash
-git clone git@github.com:dmnavalon/autonomus.git
+git clone https://github.com/dmnavalon/autonomus.git
 cd autonomus
 npm install
-```
 
-### 3. Configure environment
+# 1. Set GitHub Secrets (silent stdin, never typed in chat)
+./scripts/setup-secrets.sh
 
-Copy `.env.example` to `.env` and fill in values. See [docs/env-vars.md](docs/env-vars.md) for how to obtain each one.
+# 2. Create the GitHub labels
+./scripts/setup-labels.sh dmnavalon/autonomus
 
-### 4. Configure GitHub Secrets
-
-```bash
-gh secret set TELEGRAM_BOT_TOKEN -R dmnavalon/autonomus
-gh secret set TELEGRAM_WEBHOOK_SECRET -R dmnavalon/autonomus
-gh secret set AI_GATEWAY_API_KEY -R dmnavalon/autonomus
-gh secret set GH_AUTOMATION_TOKEN -R dmnavalon/autonomus
-gh secret set VERCEL_TOKEN -R dmnavalon/autonomus
-gh secret set VERCEL_TEAM_ID -R dmnavalon/autonomus
-```
-
-### 5. Deploy Telegram webhook to Vercel
-
-```bash
+# 3. Deploy the Telegram webhook to Vercel
 cd packages/telegram-webhook
-vercel link        # link to a Vercel project
-vercel env pull    # sync env to local
-vercel deploy      # preview deploy
+vercel link --yes --project autonomus-telegram-webhook --scope diegomartinez-7745s-projects
+cd ../..
+./scripts/setup-vercel-env.sh
+cd packages/telegram-webhook
+vercel deploy --prod --yes --scope diegomartinez-7745s-projects
+cd ../..
+
+# 4. Register the webhook with Telegram
+./scripts/setup-telegram-webhook.sh
 ```
 
-### 6. Set Telegram webhook
+### First user
 
-```bash
-curl -F "url=https://<your-deployment>.vercel.app/api/telegram/webhook" \
-     -F "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
-     "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook"
-```
+Send `/start` to your bot. It returns your `chat_id`. Add it to `registry/users.json` and push.
 
-### 7. Authorize your Telegram chat
+---
 
-Edit `registry/users.json` and add your `chat_id` (find it by sending `/start` once and inspecting the rejected webhook log).
+## Bot commands
+
+| Command | What it does |
+|---|---|
+| `/start`, `/id`, `/whoami` | Returns your chat_id (works without auth) |
+| `/help` | Lists all commands |
+| `/apps` | Lists your linked apps; ✅ marks the active one |
+| `/use <slug>` | Sets the active project (sticky) |
+| `/current` | Shows the active project |
+| `/link <slug> <owner/repo>` | Opens a PR adding an app to `registry/apps.json` |
+
+Free-text messages target the active project. If you have multiple apps and no sticky, the bot shows an inline keyboard. If you have zero apps, it shows the onboarding menu. See [docs/onboarding.md](docs/onboarding.md).
+
+Every reply from the bot is prefixed with `📁 *Proyecto:* <slug>`.
 
 ---
 
 ## End-to-end demo
 
-Send to your bot on Telegram:
+Send to your bot:
 
-> "No funciona cerrar sesión"
+> No funciona cerrar sesión
 
-Within ~5–10 minutes you should receive:
+The Issue created on GitHub will be processed by the orchestrator workflow and (when the linked app has `vercel_project_id` set) you should receive within ~5–10 minutes:
 
-> "No se detectaron errores bloqueantes en QA automático. Listo para revisión humana. Preview: https://… PR: https://…"
+> No se detectaron errores bloqueantes en QA automático. Listo para revisión humana. Preview: https://… PR: https://…
 
-The Issue on GitHub will contain a structured trace of every agent's decision and a token/cost summary.
+The Issue contains a structured trace of every agent's decision and a final token/cost summary.
+
+---
+
+## Repository layout
+
+```
+autonomus/
+├── agents/             # 19 agents (instructions.md per agent + manifest.yml)
+├── protocols/          # 20 protocols (auditable rules)
+├── flows/              # 6 flow recipes (software_nuevo, feature, bug, ...)
+├── prompts/shared/     # Cacheable system+safety prompt prefix
+├── evals/              # 3 eval suites (classification, handoffs, compliance)
+├── packages/
+│   ├── orchestrator/   # Coordinator, agents, schemas, tools (TS)
+│   ├── telegram-webhook/ # Next.js App Router → deployed to Vercel
+│   └── shared/         # Cross-workspace types (currently minimal)
+├── registry/           # users.json, apps.json — operational data
+├── tests/factory/      # Vitest suite (101+ tests)
+├── docs/               # architecture, runbook, env-vars, onboarding, agents_overview
+├── scripts/            # setup-{secrets,labels,vercel-env,telegram-webhook}.sh
+├── .github/workflows/  # 8 workflows
+└── README.md
+```
 
 ---
 
 ## Token efficiency (principio rector)
 
-See [docs/architecture.md#token-efficiency](docs/architecture.md) for the full strategy. Highlights:
-
-- **Prompt caching** on every LLM call (stable prefix from `prompts/shared/system.md` + `agents/<n>/instructions.md`).
-- **Diffs only**, never full files between agents.
-- **Logs as artifacts**, only relevant extracts (≤ 200 lines) reach the LLM.
-- **Cheap model by default**, strong tier only for code generation/repair.
-- **Hard caps per agent**, hard cap per job, alarm at 70%, abort at 100%.
-- **Telemetry**: every job's final Issue comment lists `total_input_tokens`, `total_output_tokens`, `total_cached_tokens`, `total_cost_usd`.
+- **Prompt prefix is cached** by the provider (Anthropic ephemeral / OpenAI auto). Only `userInput` counts against per-agent caps.
+- **Diffs only** between Programmer ↔ Reviewer ↔ Repairer.
+- **Logs as artifacts**, only ≤ 200-line extracts reach the LLM.
+- **Cheap model by default**, `strong` only for code generation/repair.
+- **Per-job cap**: $2 USD. Alarm at 70%, abort at 100%.
+- **Telemetry**: every Issue ends with a markdown table showing real costs.
 
 ---
 
 ## Status
 
-🚧 In progress. See [PLAN.md](docs/architecture.md) for the build phases.
+| Phase | Status |
+|---|---|
+| 0. Bootstrap | ✅ |
+| 1. GitHub-first schema | ✅ |
+| 2. Telegram intake | ✅ |
+| 3. Orchestrator + 4 LLM agents (intake → architecture) | ✅ |
+| 3.1. Doc-maestro layer (19 agents + 20 protocols + 5 workflows) | ✅ |
+| 3.5. Active-project resolution + bot commands | ✅ |
+| 4. Programmer + GitHub Operator (existing-app flow) | ✅ |
+| 4.5. `software_nuevo` flow (creates new repo) | ⏳ deferred |
+| 5. Vercel Preview detection (polling) | ✅ |
+| 6. QA Playwright (inline runner) | ✅ |
+| 7. Analyst + Repairer loop (≤5) | ✅ |
+| 8. Final Verifier + Telegram notify (canonical) | ✅ |
+| 9. Tests + docs + e2e | ✅ |
+
+101+/101 tests green. Webhook live at https://autonomus-telegram-webhook.vercel.app.
 
 ---
 

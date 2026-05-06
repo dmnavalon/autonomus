@@ -17,6 +17,7 @@
   "dependencies": {
     "@ai-sdk/gateway": "^3.0.0",
     "@octokit/rest": "^21.0.2",
+    "@playwright/test": "^1.59.0",
     "ai": "^6.0.0",
     "dotenv": "^16.4.5",
     "zod": "^3.23.8"

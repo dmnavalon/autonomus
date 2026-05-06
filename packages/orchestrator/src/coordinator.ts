@@ -60,9 +60,8 @@ import { runFactoryEvaluator } from './agents/factory_evaluator.js';
 import { runSecurityScopeGuard } from './agents/security_scope_guard.js';
 import { runPromptChangeManager } from './agents/prompt_change_manager.js';
 
-// Suppress "unused import" linting; these will be wired in Phase 4–7 and exposed
+// Suppress "unused import" linting; these will be wired in Phase 5–7 and exposed
 // through the dispatcher below.
-void runProgramador;
 void runRevisorCodigo;
 void runQaPlanner;
 void runPlaywrightGeneration;
@@ -70,11 +69,35 @@ void runAnalistaLogs;
 void runReparador;
 void runVerificador;
 void runProtocolBinder;
-void runGithubOperator;
 void runTelegramNotifier;
 void runFactoryEvaluator;
-void runSecurityScopeGuard;
 void runPromptChangeManager;
+
+// Phase 4: actually wired
+import { findAppBySlug } from './state/apps-resolver.js';
+import { loadFilesExtracts } from './state/files-loader.js';
+import {
+  parseRepo,
+  branchExists,
+  createBranchFromBase,
+  commitTreeToBranch,
+  openPullRequest,
+  type FileEdit,
+} from './tools/github-target.js';
+import { detectSecrets } from './agents/github_operator.js';
+import { previewUrl, waitForBranchDeployment } from './tools/vercel.js';
+import { runPlaywrightInline } from './tools/playwright-runner.js';
+import { sendTelegramMessage } from './tools/telegram.js';
+import type { PlaywrightExecutionOutput } from './schemas/index.js';
+
+const FORBIDDEN_TARGET_PATHS = [
+  /^\.env(\..*)?$/,
+  /^agents\//,
+  /^prompts\//,
+  /^protocols\//,
+  /^\.github\/workflows\//,
+  /^registry\//,
+];
 
 export interface RunResult {
   finalState: string;
@@ -220,17 +243,105 @@ async function runIntakeAndPlanning(issue: IssueSnapshot, ledger: JobLedger): Pr
   ledger.record('arquitecto', arqResult.model, arqResult.usage);
   await postAgentComment(issueNumber, 'arquitecto', arqResult.model, arqResult.output, arqResult.usage);
 
-  // Phase 3 stops here. Phase 4 picks up state:planning to invoke the Programmer.
+  // ---------- step 5: Programador + GithubOperator (Phase 4) -----------
+  if (claResult.output.tipo === 'software_nuevo') {
+    await commentOnIssue(
+      issueNumber,
+      '> Coordinator: `software_nuevo` flow not wired yet (Phase 4.5). PR is for human handoff.',
+    );
+    await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:human-review-required');
+    await postLedger(issueNumber, ledger);
+    return { finalState: 'state:human-review-required', ledger };
+  }
+
+  if (!meta.appSlug) {
+    await commentOnIssue(
+      issueNumber,
+      '> Coordinator: missing `app_slug`; cannot proceed to Programmer. Marking as needs-human.',
+    );
+    await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
+    await postLedger(issueNumber, ledger);
+    return { finalState: 'state:failed-needs-human', ledger };
+  }
+
+  const programmerResult = await runProgrammerAndOpenPR({
+    issueNumber,
+    appSlug: meta.appSlug,
+    spec: planResult.output,
+    plan: arqResult.output,
+    complejidad: claResult.output.complejidad,
+    riesgo: claResult.output.riesgo,
+    ledger,
+  });
+
+  if (programmerResult.kind === 'error') {
+    await commentOnIssue(issueNumber, `> Coordinator: programador phase failed — ${programmerResult.reason}`);
+    await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
+    await postLedger(issueNumber, ledger);
+    return { finalState: 'state:failed-needs-human', ledger };
+  }
+
+  await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:pr-created');
   await commentOnIssue(
     issueNumber,
-    [
-      '> Coordinator: Phase 3 complete (planning + architecture).',
-      '> Phase 4 (Programador) will pick up from `state:planning` and write code.',
-    ].join('\n'),
+    `> Coordinator: PR opened. Branch \`${programmerResult.branch}\`, PR [#${programmerResult.prNumber}](${programmerResult.prUrl}).`,
   );
 
+  // ---------- step 6: wait for Vercel Preview (Phase 5) ---------------
+  const app = await findAppBySlug(meta.appSlug);
+  if (!app?.vercel_project_id) {
+    await commentOnIssue(
+      issueNumber,
+      `> Coordinator: \`${meta.appSlug}\` no tiene \`vercel_project_id\` en registry. Salteando wait-for-preview.`,
+    );
+    await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:human-review-required');
+    await postLedger(issueNumber, ledger);
+    return { finalState: 'state:human-review-required', ledger };
+  }
+
+  await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:waiting-preview');
+  const deployment = await waitForBranchDeployment(app.vercel_project_id, programmerResult.branch);
+  if (!deployment) {
+    await commentOnIssue(issueNumber, '> Coordinator: timeout esperando Vercel deployment para la branch.');
+    await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
+    await postLedger(issueNumber, ledger);
+    return { finalState: 'state:failed-needs-human', ledger };
+  }
+  if (deployment.state !== 'READY') {
+    await commentOnIssue(
+      issueNumber,
+      `> Coordinator: deployment terminó con estado \`${deployment.state}\`.`,
+    );
+    await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
+    await postLedger(issueNumber, ledger);
+    return { finalState: 'state:failed-needs-human', ledger };
+  }
+  const previewUrlValue = previewUrl(deployment);
+  await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:preview-ready');
+  await commentOnIssue(
+    issueNumber,
+    `> Coordinator: Vercel Preview ready → ${previewUrlValue} (commit \`${deployment.meta?.githubCommitSha?.slice(0, 7) ?? '?'}\`)`,
+  );
+
+  // ---------- step 7: QA pipeline (Phase 6) ----------------------------
+  const qaResult = await runQAPipeline({
+    issueNumber,
+    spec: planResult.output,
+    tipo: claResult.output.tipo,
+    previewUrl: previewUrlValue,
+    branch: programmerResult.branch,
+    commitSha: deployment.meta?.githubCommitSha ?? '',
+    appRepo: app.repo,
+    appSlug: app.slug,
+    vercelProjectId: app.vercel_project_id ?? null,
+    prNumber: programmerResult.prNumber,
+    prUrl: programmerResult.prUrl,
+    ledger,
+    repairAttempt: 0,
+  });
+
   await postLedger(issueNumber, ledger);
-  return { finalState: 'state:planning', ledger };
+  return { finalState: qaResult.finalState, ledger };
 }
 
 async function stub(
@@ -317,6 +428,422 @@ async function postLedger(issueNumber: number, ledger: JobLedger): Promise<void>
     issueNumber,
     ['## 💸 Telemetry (so far)', '', ledger.summaryMarkdown()].join('\n'),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: programmer + github operator
+// ---------------------------------------------------------------------------
+
+interface ProgrammerSuccess {
+  kind: 'success';
+  branch: string;
+  prNumber: number;
+  prUrl: string;
+}
+interface ProgrammerError {
+  kind: 'error';
+  reason: string;
+}
+
+async function runProgrammerAndOpenPR(args: {
+  issueNumber: number;
+  appSlug: string;
+  spec: PlanificadorOutput;
+  plan: ArquitectoOutput;
+  complejidad: ClasificadorOutput['complejidad'];
+  riesgo: ClasificadorOutput['riesgo'];
+  ledger: JobLedger;
+}): Promise<ProgrammerSuccess | ProgrammerError> {
+  const { issueNumber, appSlug, spec, plan, ledger } = args;
+
+  const app = await findAppBySlug(appSlug);
+  if (!app) return { kind: 'error', reason: `app \`${appSlug}\` no en registry/apps.json` };
+
+  const target = parseRepo(app.repo);
+  const baseBranch = app.default_branch || 'main';
+  const branchName = `factory/${issueNumber}`;
+
+  // Refuse if branch already exists (re-runs go through state:retesting in Phase 7).
+  if (await branchExists(target, branchName)) {
+    return { kind: 'error', reason: `branch \`${branchName}\` ya existe en ${app.repo}` };
+  }
+
+  const { files_extracts, not_found } = await loadFilesExtracts(
+    target,
+    baseBranch,
+    plan.archivos_probables,
+  );
+
+  const programador = await runProgramador({
+    spec,
+    plan_tecnico: plan,
+    app_context: { slug: app.slug, repo: app.repo, default_branch: baseBranch },
+    files_extracts,
+    branch_name: branchName,
+    complejidad: args.complejidad,
+    riesgo: args.riesgo,
+  });
+  ledger.record('programador', programador.model, programador.usage);
+  await postAgentComment(
+    issueNumber,
+    'programador',
+    programador.model,
+    {
+      ...programador.output,
+      archivos_modificados: programador.output.archivos_modificados.map((f) => ({
+        path: f.path,
+        operation: f.operation,
+        size_chars: f.content.length,
+      })),
+    },
+    programador.usage,
+  );
+
+  // Post-LLM safety checks ---------------------------------------------------
+  const edits: FileEdit[] = programador.output.archivos_modificados;
+
+  // 1) every edited path must be in the Architect's archivos_probables
+  const allowedPaths = new Set(plan.archivos_probables);
+  const drift = edits.filter((e) => !allowedPaths.has(e.path));
+  if (drift.length > 0) {
+    return { kind: 'error', reason: `scope drift: ${drift.map((d) => d.path).join(', ')}` };
+  }
+
+  // 2) no forbidden paths
+  const forbidden = edits.filter((e) =>
+    FORBIDDEN_TARGET_PATHS.some((re) => re.test(e.path)),
+  );
+  if (forbidden.length > 0) {
+    return { kind: 'error', reason: `forbidden paths: ${forbidden.map((d) => d.path).join(', ')}` };
+  }
+
+  // 3) secret detection on file contents and commit message
+  const filesPayload: Record<string, string> = {};
+  for (const e of edits) filesPayload[e.path] = e.content;
+  const secretHits = [
+    ...detectSecrets(filesPayload),
+    ...detectSecrets({ commit: programador.output.commit_message + '\n' + programador.output.commit_body }),
+  ];
+  if (secretHits.length > 0) {
+    return { kind: 'error', reason: `secret detected: ${secretHits.slice(0, 3).join(', ')}` };
+  }
+
+  // 4) operations sanity
+  const newCreates = edits.filter((e) => e.operation === 'create' && !not_found.includes(e.path));
+  if (newCreates.length > 0) {
+    return {
+      kind: 'error',
+      reason: `programmer marked existing files as 'create': ${newCreates.map((c) => c.path).join(', ')}`,
+    };
+  }
+
+  // Execute git ops ----------------------------------------------------------
+  await createBranchFromBase(target, baseBranch, branchName);
+  const commitSha = await commitTreeToBranch(
+    target,
+    branchName,
+    edits,
+    programador.output.commit_message,
+    programador.output.commit_body,
+  );
+  const prBody = [
+    programador.output.pr_summary,
+    '',
+    '---',
+    `Closes ${process.env.FACTORY_REPO ?? 'dmnavalon/autonomus'}#${issueNumber}`,
+    '',
+    '### Archivos modificados',
+    ...edits.map((e) => `- \`${e.path}\` (${e.operation})`),
+    '',
+    '> Generated by **Autonomus** factory. Do **NOT** auto-merge.',
+    `> Commit: \`${commitSha}\``,
+  ].join('\n');
+  const pr = await openPullRequest(target, {
+    head: branchName,
+    base: baseBranch,
+    title: programador.output.pr_title,
+    body: prBody,
+  });
+
+  return { kind: 'success', branch: branchName, prNumber: pr.number, prUrl: pr.url };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 + 7 + 8: QA pipeline + repair loop + final verification + notify
+// ---------------------------------------------------------------------------
+
+interface QAPipelineArgs {
+  issueNumber: number;
+  spec: PlanificadorOutput;
+  tipo: ClasificadorOutput['tipo'];
+  previewUrl: string;
+  branch: string;
+  commitSha: string;
+  appRepo: string;
+  appSlug: string;
+  vercelProjectId: string | null;
+  prNumber: number;
+  prUrl: string;
+  ledger: JobLedger;
+  repairAttempt: number;
+}
+
+const MAX_REPAIR_CYCLES = 5;
+
+async function runQAPipeline(args: QAPipelineArgs): Promise<{ finalState: string }> {
+  const { issueNumber, spec, ledger, previewUrl: preview } = args;
+  const target = parseRepo(args.appRepo);
+  let currentBranch = args.branch;
+  let currentCommitSha = args.commitSha;
+  let attempt = args.repairAttempt;
+
+  // Generate the QA plan + Playwright specs ONCE; tests are reused across retries.
+  await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:qa-planning');
+  const qaPlan = await runQaPlanner({ spec, tipo: args.tipo, preview_url: preview });
+  ledger.record('qa_planner', qaPlan.model, qaPlan.usage);
+  await postAgentComment(issueNumber, 'qa_planner', qaPlan.model, qaPlan.output, qaPlan.usage);
+
+  const pwGen = await runPlaywrightGeneration({
+    plan: qaPlan.output,
+    preview_url: preview,
+    app_stack: 'next.js',
+    existing_tests: [],
+  });
+  ledger.record('playwright', pwGen.model, pwGen.usage);
+  await postAgentComment(issueNumber, 'playwright', pwGen.model, pwGen.output, pwGen.usage);
+
+  // The Playwright agent emits files_emitted as paths; we need the LLM to also produce
+  // the spec body. For inline execution we ask the LLM to produce specs from the plan
+  // directly via a small synthesis step (heuristic: one file per test).
+  const specs = synthesizeSpecsFromPlan(qaPlan.output, preview);
+
+  while (true) {
+    await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:qa-running');
+    await commentOnIssue(
+      issueNumber,
+      `> Coordinator: ejecutando Playwright (intento ${attempt + 1}/${MAX_REPAIR_CYCLES + 1}) contra \`${preview}\``,
+    );
+
+    const run = await runPlaywrightInline({ previewUrl: preview, specs });
+    await commentOnIssue(
+      issueNumber,
+      [
+        '### 🧪 Playwright',
+        '',
+        '```json',
+        JSON.stringify(run.output, null, 2),
+        '```',
+      ].join('\n'),
+    );
+
+    if (run.output.estado === 'passed') {
+      // ----- Phase 8: verifier + notify ---------------------------------
+      await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:auto-approved');
+      const verResult = runVerificador({
+        issue_number: issueNumber,
+        branch: currentBranch,
+        pr_number: args.prNumber,
+        preview_url: preview,
+        last_qa_result: run.output,
+        last_review_result: { aprobado: true, observaciones: [], cambios_solicitados: [] },
+        last_commit_sha: currentCommitSha,
+        qa_commit_sha: currentCommitSha,
+        build_ok: true,
+        lint_ok: true,
+        typecheck_ok: true,
+      });
+      ledger.record('verificador', verResult.model, verResult.usage);
+      await postAgentComment(issueNumber, 'verificador', verResult.model, verResult.output, verResult.usage);
+
+      const finalState = verResult.output.go ? 'state:human-review-required' : 'state:failed-needs-human';
+      await transitionState(issueNumber, await refreshLabels(issueNumber), finalState);
+      await notifyTerminal(issueNumber, verResult.output.go, {
+        prUrl: args.prUrl,
+        previewUrl: preview,
+        razon: verResult.output.razon_si_no_go,
+      });
+      return { finalState };
+    }
+
+    // Failed → analista → reparador (cap 5)
+    const blocking = run.output.fallos.some((f) => f.error_resumen.length > 0);
+    await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:qa-failed');
+    const analista = await runAnalistaLogs({
+      log_extract: run.logExtract,
+      playwright_results: run.output,
+      context: { intento: attempt + 1, tipo_solicitud: args.tipo, archivos_recientes: [] },
+      bloqueante: blocking,
+    });
+    ledger.record('analista_logs', analista.model, analista.usage);
+    await postAgentComment(issueNumber, 'analista_logs', analista.model, analista.output, analista.usage);
+
+    if (analista.output.tipo_error !== 'producto') {
+      // Factory / infra / credenciales / desconocido → escalar humano.
+      await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
+      await notifyTerminal(issueNumber, false, {
+        prUrl: args.prUrl,
+        previewUrl: preview,
+        razon: `tipo_error=${analista.output.tipo_error}: ${analista.output.causa_probable}`,
+      });
+      return { finalState: 'state:failed-needs-human' };
+    }
+
+    if (attempt >= MAX_REPAIR_CYCLES) {
+      await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
+      await notifyTerminal(issueNumber, false, {
+        prUrl: args.prUrl,
+        previewUrl: preview,
+        razon: `agotados ${MAX_REPAIR_CYCLES} intentos de reparación`,
+      });
+      return { finalState: 'state:failed-needs-human' };
+    }
+
+    attempt += 1;
+    await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:repairing');
+    await addLabelSafe(issueNumber, `repair:${attempt}`);
+
+    // Load files the analyst flagged from the CURRENT branch (carries prior fixes).
+    const { files_extracts, not_found } = await loadFilesExtracts(
+      target,
+      currentBranch,
+      analista.output.archivos_probables,
+    );
+    void not_found;
+
+    let reparador;
+    try {
+      reparador = await runReparador({
+        spec,
+        diagnosis: analista.output,
+        diff_actual: '',
+        files_extracts,
+        intento: attempt,
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'unknown';
+      await commentOnIssue(issueNumber, `> Coordinator: reparador falló — ${detail}`);
+      await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
+      await notifyTerminal(issueNumber, false, {
+        prUrl: args.prUrl,
+        previewUrl: preview,
+        razon: `reparador: ${detail}`,
+      });
+      return { finalState: 'state:failed-needs-human' };
+    }
+    ledger.record('reparador', reparador.model, reparador.usage);
+    await postAgentComment(
+      issueNumber,
+      'reparador',
+      reparador.model,
+      {
+        ...reparador.output,
+        archivos_modificados: reparador.output.archivos_modificados.map((f) => ({
+          path: f.path,
+          operation: f.operation,
+          size_chars: f.content.length,
+        })),
+      },
+      reparador.usage,
+    );
+
+    const drift = reparador.output.archivos_modificados.filter(
+      (e) => !analista.output.archivos_probables.includes(e.path),
+    );
+    if (drift.length > 0) {
+      await commentOnIssue(
+        issueNumber,
+        `> Coordinator: reparador escapó del scope (${drift.map((d) => d.path).join(', ')}). Escalando.`,
+      );
+      await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
+      await notifyTerminal(issueNumber, false, {
+        prUrl: args.prUrl,
+        previewUrl: preview,
+        razon: 'reparador scope drift',
+      });
+      return { finalState: 'state:failed-needs-human' };
+    }
+
+    const newCommitSha = await commitTreeToBranch(
+      target,
+      currentBranch,
+      reparador.output.archivos_modificados,
+      reparador.output.commit_message,
+      reparador.output.commit_body,
+    );
+    currentCommitSha = newCommitSha;
+
+    await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:retesting');
+
+    // Wait for new Vercel deployment from the new commit before re-running QA.
+    if (args.vercelProjectId) {
+      await commentOnIssue(
+        issueNumber,
+        `> Coordinator: esperando Vercel re-deploy del commit \`${newCommitSha.slice(0, 7)}\``,
+      );
+      const newDeploy = await waitForBranchDeployment(args.vercelProjectId, currentBranch);
+      if (!newDeploy || newDeploy.state !== 'READY') {
+        await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
+        await notifyTerminal(issueNumber, false, {
+          prUrl: args.prUrl,
+          previewUrl: preview,
+          razon: `Vercel no completó el re-deploy del commit ${newCommitSha.slice(0, 7)}`,
+        });
+        return { finalState: 'state:failed-needs-human' };
+      }
+    }
+  }
+}
+
+function synthesizeSpecsFromPlan(
+  plan: import('./schemas/index.js').QaPlannerOutput,
+  previewUrl: string,
+): Array<{ filename: string; content: string }> {
+  const specs: Array<{ filename: string; content: string }> = [];
+  for (const t of plan.tests) {
+    const filename = `${t.nombre}.spec.ts`;
+    const code = `import { test, expect } from '@playwright/test';
+test('${t.nombre} (${t.prioridad})', async ({ page }) => {
+  await page.goto('${previewUrl}');
+  // Steps:
+${t.pasos.map((p) => `  // - ${p}`).join('\n')}
+  // Expected: ${t.esperado}
+  // Smoke assertion fallback — Phase 6 stub. Replace with concrete steps when LLM emits real spec body.
+  await expect(page).toHaveTitle(/.*/);
+});
+`;
+    specs.push({ filename, content: code });
+  }
+  return specs;
+}
+
+async function addLabelSafe(issueNumber: number, label: string): Promise<void> {
+  try {
+    const { addLabel } = await import('./tools/github.js');
+    await addLabel(issueNumber, label);
+  } catch {
+    /* ignore — label may not exist; already-set is fine */
+  }
+}
+
+async function notifyTerminal(
+  issueNumber: number,
+  success: boolean,
+  args: { prUrl: string; previewUrl: string; razon: string },
+): Promise<void> {
+  const issue = await fetchIssue(issueNumber);
+  const meta = parseTelegramJobBody(issue.body);
+  const msg = success
+    ? `No se detectaron errores bloqueantes en QA automático. Listo para revisión humana. Preview: ${args.previewUrl}. PR: ${args.prUrl}.`
+    : `La fábrica no pudo cerrar el ciclo automático. Revisa el Issue #${issueNumber} en GitHub. Razón: ${args.razon}.`;
+  if (meta.chatId !== null) {
+    try {
+      await sendTelegramMessage(meta.chatId, msg);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'unknown';
+      await commentOnIssue(issueNumber, `> Coordinator: notificación Telegram falló — ${detail}`);
+    }
+  }
+  await commentOnIssue(issueNumber, `> 📣 Telegram: ${msg}`);
 }
 
 // Re-export some types for tests

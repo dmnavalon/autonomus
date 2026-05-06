@@ -76,6 +76,30 @@ export const ProgramadorOutputSchema = z.object({
 });
 export type ProgramadorOutput = z.infer<typeof ProgramadorOutputSchema>;
 
+/**
+ * The Programmer LLM produces this PLAN: file contents + commit/PR text.
+ * The GithubOperator (deterministic) takes this plan and produces the final
+ * ProgramadorOutput by creating a branch, committing the files, and opening the PR.
+ */
+export const ProgramadorPlanSchema = z.object({
+  archivos_modificados: z
+    .array(
+      z.object({
+        path: z.string().min(1).max(200).regex(/^[A-Za-z0-9_./-]+$/),
+        content: z.string().max(80_000),
+        operation: z.enum(['create', 'update', 'delete']),
+      }),
+    )
+    .min(1)
+    .max(15),
+  commit_message: z.string().min(5).max(72),
+  commit_body: z.string().max(500),
+  pr_title: z.string().min(5).max(80),
+  pr_summary: z.string().min(10).max(2000),
+  diff_resumen: z.string().max(300),
+});
+export type ProgramadorPlan = z.infer<typeof ProgramadorPlanSchema>;
+
 export const RevisorOutputSchema = z.object({
   aprobado: z.boolean(),
   observaciones: z.array(z.string().max(200)).max(5),
@@ -144,6 +168,24 @@ export const ReparadorOutputSchema = z.object({
   tests_updated: z.array(z.string().max(200)).max(10),
 });
 export type ReparadorOutput = z.infer<typeof ReparadorOutputSchema>;
+
+/** What the Reparador LLM produces; the GithubOperator commits these edits. */
+export const ReparadorPlanSchema = z.object({
+  archivos_modificados: z
+    .array(
+      z.object({
+        path: z.string().min(1).max(200).regex(/^[A-Za-z0-9_./-]+$/),
+        content: z.string().max(80_000),
+        operation: z.enum(['create', 'update', 'delete']),
+      }),
+    )
+    .min(1)
+    .max(10),
+  commit_message: z.string().min(5).max(72),
+  commit_body: z.string().max(500),
+  cambios: z.string().min(5).max(300),
+});
+export type ReparadorPlan = z.infer<typeof ReparadorPlanSchema>;
 
 export const VerificadorChecklistSchema = z.object({
   branch_existe: z.boolean(),

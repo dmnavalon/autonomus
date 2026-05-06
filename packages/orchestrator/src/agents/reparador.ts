@@ -1,13 +1,14 @@
 /**
  * 14_repair_agent — corrige fallas diagnosticadas. Cap: 5 ciclos por job.
- * LLM strong; reasoning ON si attempt ≥ 3. Output: ReparadorOutput.
+ * LLM strong; reasoning ON si attempt ≥ 3. Output: ReparadorPlan (file edits).
+ * The actual commit is performed by tools/github-target.ts.
  */
 import { chooseModel } from '../router.js';
 import { loadAgentPrefix } from '../tools/prompt-loader.js';
 import { callAgentLLM } from '../tools/llm.js';
 import {
-  ReparadorOutputSchema,
-  type ReparadorOutput,
+  ReparadorPlanSchema,
+  type ReparadorPlan,
   type AnalistaLogsOutput,
   type PlanificadorOutput,
 } from '../schemas/index.js';
@@ -23,7 +24,7 @@ export interface ReparadorInput {
 
 export async function runReparador(
   input: ReparadorInput,
-): Promise<{ output: ReparadorOutput; usage: AgentUsage; model: string }> {
+): Promise<{ output: ReparadorPlan; usage: AgentUsage; model: string }> {
   if (input.intento > 5) {
     throw new Error('max_repair_cycles_reached');
   }
@@ -36,7 +37,7 @@ export async function runReparador(
     model: choice.model,
     systemPrefix: prefix,
     userInput,
-    schema: ReparadorOutputSchema,
+    schema: ReparadorPlanSchema,
     temperature: 0.2,
   });
 
