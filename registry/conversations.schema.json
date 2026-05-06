@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AutonomusConversationsRegistry",
+  "type": "object",
+  "required": ["version", "conversations"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "conversations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["chat_id", "wizard", "step", "started_at", "expires_at"],
+        "properties": {
+          "chat_id": { "type": "integer" },
+          "wizard": { "type": "string", "enum": ["create-project", "link-repo"] },
+          "step": {
+            "type": "string",
+            "enum": ["name", "description", "type", "confirm", "label", "pick-gh"]
+          },
+          "draft": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "type": { "type": "string" },
+              "slug": { "type": "string" },
+              "repo": { "type": "string" },
+              "label": { "type": "string" },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "owner": { "type": "string" },
+                    "name": { "type": "string" }
+                  }
+                }
+              },
+              "page": { "type": "integer" }
+            }
+          },
+          "started_at": { "type": "string", "format": "date-time" },
+          "expires_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

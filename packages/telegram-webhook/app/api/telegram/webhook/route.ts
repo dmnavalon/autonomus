@@ -2,11 +2,11 @@
  * Telegram webhook entrypoint.
  *
  *   Telegram → POST /api/telegram/webhook → verify secret → dispatch:
- *     - message               → resolve project / handle command / create Issue
- *     - callback_query (button) → attach app to pending Issue or onboarding action
+ *     - active wizard? → projects-flow handles message/callback → respond
+ *     - message               → command? command-flow → resolve project / create Issue
+ *     - callback_query        → start-menu / wizard-step / pick-app / onboarding
  *
- * Always returns 200 to Telegram (except on bad secret = 403) so the bot does
- * not retry; user-facing rejections are conveyed via sendMessage.
+ * Always returns 200 to Telegram (except on bad secret = 403).
  */
 import { isValidWebhookRequest } from '@/lib/auth';
 import {
@@ -16,8 +16,8 @@ import {
 import { resolveApp } from '@/lib/apps-resolver';
 import {
   buildAppSelectionKeyboard,
-  buildOnboardingKeyboard,
   parseCallbackData,
+  type ParsedCallback,
 } from '@/lib/inline-keyboard';
 import {
   attachAppSlug,
@@ -28,7 +28,19 @@ import {
   sendMessage,
   withHeader,
 } from '@/lib/telegram';
-import { dispatchCommand, helpForOnboarding } from '@/lib/commands';
+import { dispatchCommand } from '@/lib/commands';
+import { clearWizard, getWizard } from '@/lib/conversation-state';
+import {
+  appDisplayName,
+  continueWizardOnCallback,
+  continueWizardOnText,
+  isWizardTextStep,
+  startCreateWizard,
+  startLinkWizard,
+  welcomeMessage,
+  type FlowMessage,
+  type FlowResult,
+} from '@/lib/projects-flow';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -38,6 +50,7 @@ interface TelegramMessage {
   text?: string;
   chat: { id: number };
   from?: { username?: string; first_name?: string };
+  reply_to_message?: { message_id: number };
 }
 interface TelegramCallbackQuery {
   id: string;
@@ -78,21 +91,20 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
   const chatId = message.chat.id;
   const username = message.from?.username ?? message.from?.first_name;
 
-  // /start, /id, /whoami — usable BEFORE auth so a new user can discover their chat_id.
+  // Onboarding identity commands work without auth so a new user can find their chat_id.
   if (text === '/start' || text === '/id' || text === '/whoami') {
     await sendMessage(
       chatId,
       withHeader(
         null,
         [
-          '*Autonomus — Software Factory Agent*',
+          '*Autonomus*',
           '',
           `Tu chat_id es: \`${chatId}\``,
           `Tu username: \`${username ?? '(sin username)'}\``,
           '',
-          'Para autorizarte, agrega tu chat_id a `registry/users.json` en el repo.',
-          'Después podés mandarme solicitudes y abro Issues.',
-          'Usá `/help` para ver comandos.',
+          'Si el admin ya te autorizó, mandame cualquier mensaje y te muestro tus proyectos.',
+          'Sino, pídele que te agregue al registro.',
         ].join('\n'),
       ),
     );
@@ -104,28 +116,35 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
       chatId,
       withHeader(
         null,
-        `chat_id \`${chatId}\` no autorizado. Pídele al admin que te agregue a \`registry/users.json\`.`,
+        `chat_id \`${chatId}\` no autorizado. Pídele al admin que te agregue.`,
       ),
     );
     return Response.json({ ok: true, mode: 'unauthorized', chatId });
   }
 
+  // Active wizard → forward text to the wizard handler.
+  const wizard = await getWizard(chatId);
+  if (wizard && isWizardTextStep(wizard) && !text.startsWith('/')) {
+    await applyFlow(chatId, await continueWizardOnText(wizard, text, username));
+    return Response.json({ ok: true, mode: 'wizard-text' });
+  }
+
   // Slash commands (auth required)
   const cmd = await dispatchCommand(text, chatId, username);
   if (cmd) {
-    await sendMessage(chatId, withHeader(cmd.headerSlug, cmd.text));
+    await sendMessage(chatId, withHeader(cmd.headerSlug, cmd.text), {
+      replyMarkup: cmd.replyMarkup,
+    });
     return Response.json({ ok: true, mode: 'command' });
   }
 
-  // Free-text message: detect software_nuevo intent (heuristic) — no project
-  // resolution needed because the factory will create the repo. The Recepcionista
-  // re-classifies on its end.
+  // Free-text message — software_nuevo intent shortcut (no project resolution needed).
   if (looksLikeSoftwareNuevo(text)) {
     const issue = await createJobIssue({
       message: text,
       chatId,
       username,
-      appSlug: null, // software_nuevo → factory creates the repo; null is fine
+      appSlug: null,
       availableAppSlugs: [],
     });
     await sendMessage(
@@ -142,12 +161,8 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
   const r = await resolveApp(chatId);
 
   if (r.status === 'none') {
-    await sendMessage(
-      chatId,
-      withHeader(null, helpForOnboarding()),
-      { replyMarkup: buildOnboardingKeyboard() },
-    );
-    return Response.json({ ok: true, mode: 'no-apps' });
+    await applyFlow(chatId, await welcomeMessage(chatId, 0));
+    return Response.json({ ok: true, mode: 'welcome' });
   }
 
   if (r.status === 'sticky' || r.status === 'unique') {
@@ -162,13 +177,13 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
       chatId,
       withHeader(
         r.app.slug,
-        `✅ Recibido. Job [#${issue.number}](${issue.url}) creado.\nCuando esté listo te aviso aquí.`,
+        `✅ Recibido. Job [#${issue.number}](${issue.url}) en *${appDisplayName(r.app)}*.\nCuando esté listo te aviso aquí.`,
       ),
     );
     return Response.json({ ok: true, issue: issue.number, mode: r.status });
   }
 
-  // r.status === 'multiple' → ask which app
+  // r.status === 'multiple' → ask which project
   const issue = await createJobIssue({
     message: text,
     chatId,
@@ -178,7 +193,7 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
   });
   await sendMessage(
     chatId,
-    withHeader(null, `Job [#${issue.number}](${issue.url}) creado. ¿Sobre qué app es?`),
+    withHeader(null, `Job [#${issue.number}](${issue.url}) creado. ¿Sobre qué proyecto es?`),
     { replyMarkup: buildAppSelectionKeyboard(r.apps, issue.number) },
   );
   return Response.json({ ok: true, issue: issue.number, mode: 'pending-selection' });
@@ -196,51 +211,92 @@ function looksLikeSoftwareNuevo(text: string): boolean {
 
 async function handleCallbackQuery(cq: TelegramCallbackQuery): Promise<Response> {
   const chatId = cq.message.chat.id;
+  const username = cq.from?.username ?? cq.from?.first_name;
   const parsed = parseCallbackData(cq.data);
 
-  if (parsed.kind === 'pick') {
-    if (!(await isAuthorizedChatId(chatId))) {
-      await answerCallbackQuery(cq.id, 'no autorizado');
-      return Response.json({ ok: true, mode: 'unauthorized-callback' });
-    }
-    try {
-      await attachAppSlug(parsed.issueNumber, parsed.slug);
-      await setLastActiveSlug(chatId, parsed.slug);
-      await answerCallbackQuery(cq.id, `Trabajando en ${parsed.slug}`);
-      await sendMessage(
-        chatId,
-        withHeader(
-          parsed.slug,
-          `Job [#${parsed.issueNumber}](https://github.com/${process.env.FACTORY_REPO ?? 'dmnavalon/autonomus'}/issues/${parsed.issueNumber}) ahora apunta a \`${parsed.slug}\`. Te aviso cuando esté listo.`,
-        ),
-      );
-      return Response.json({ ok: true, mode: 'pick-applied' });
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : 'unknown';
-      await answerCallbackQuery(cq.id, 'error aplicando pick');
-      await sendMessage(chatId, withHeader(null, `No pude aplicar la selección: ${detail.slice(0, 200)}`));
-      return Response.json({ ok: false, error: detail.slice(0, 200) });
-    }
+  if (!(await isAuthorizedChatId(chatId))) {
+    await answerCallbackQuery(cq.id, 'no autorizado');
+    return Response.json({ ok: true, mode: 'unauthorized-callback' });
   }
 
-  if (parsed.kind === 'onboard') {
+  // Welcome menu actions
+  if (parsed.kind === 'start') {
     await answerCallbackQuery(cq.id);
-    if (parsed.action === 'link') {
-      await sendMessage(chatId, withHeader(null, helpForOnboarding()));
-    } else if (parsed.action === 'new') {
-      await sendMessage(
-        chatId,
-        withHeader(
-          null,
-          'Ok. Describime la app que quieres crear (qué hace, en una o dos frases) y abro un Issue de tipo `software_nuevo`. La fábrica crea el repo y el Vercel project.',
-        ),
-      );
+    if (parsed.action === 'new') {
+      await applyFlow(chatId, await startCreateWizard(chatId));
+    } else if (parsed.action === 'link') {
+      await applyFlow(chatId, await startLinkWizard(chatId));
     } else {
-      await sendMessage(chatId, withHeader(null, helpForOnboarding()));
+      await sendMessage(chatId, withHeader(null, 'Cancelado.'));
     }
-    return Response.json({ ok: true, mode: 'onboard' });
+    return Response.json({ ok: true, mode: 'start-menu' });
+  }
+
+  if (parsed.kind === 'cancel-wizard') {
+    await answerCallbackQuery(cq.id, 'cancelado');
+    await clearWizard(chatId);
+    await sendMessage(chatId, withHeader(null, 'Asistente cancelado.'));
+    return Response.json({ ok: true, mode: 'cancel-wizard' });
+  }
+
+  // Pick existing app for a pending Issue (or set sticky if issue=0)
+  if (parsed.kind === 'pick') {
+    return handlePickApp(cq, parsed);
+  }
+
+  // Wizard step callbacks
+  const wizard = await getWizard(chatId);
+  if (wizard) {
+    await answerCallbackQuery(cq.id);
+    await applyFlow(chatId, await continueWizardOnCallback(wizard, parsed, username));
+    return Response.json({ ok: true, mode: 'wizard-callback' });
   }
 
   await answerCallbackQuery(cq.id, 'callback desconocido');
   return Response.json({ ok: true, mode: 'unknown-callback' });
+}
+
+async function handlePickApp(
+  cq: TelegramCallbackQuery,
+  parsed: Extract<ParsedCallback, { kind: 'pick' }>,
+): Promise<Response> {
+  const chatId = cq.message.chat.id;
+  try {
+    if (parsed.issueNumber > 0) {
+      await attachAppSlug(parsed.issueNumber, parsed.slug);
+    }
+    await setLastActiveSlug(chatId, parsed.slug);
+    await answerCallbackQuery(cq.id, `Trabajando en ${parsed.slug}`);
+    const factoryRepo = process.env.FACTORY_REPO ?? 'dmnavalon/autonomus';
+    const text = parsed.issueNumber > 0
+      ? `Job [#${parsed.issueNumber}](https://github.com/${factoryRepo}/issues/${parsed.issueNumber}) ahora apunta a \`${parsed.slug}\`. Te aviso cuando esté listo.`
+      : `Trabajando en *${parsed.slug}*. Mandame tu solicitud.`;
+    await sendMessage(chatId, withHeader(parsed.slug, text));
+    return Response.json({ ok: true, mode: 'pick-applied' });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'unknown';
+    await answerCallbackQuery(cq.id, 'error');
+    await sendMessage(chatId, withHeader(null, `No pude aplicar la selección: ${detail.slice(0, 200)}`));
+    return Response.json({ ok: false, error: detail.slice(0, 200) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// helper
+// ---------------------------------------------------------------------------
+
+async function applyFlow(chatId: number, result: FlowResult): Promise<void> {
+  for (const m of result.messages) {
+    await sendUserMessage(chatId, m);
+  }
+  if (result.setSticky) {
+    await setLastActiveSlug(chatId, result.setSticky).catch(() => undefined);
+  }
+}
+
+async function sendUserMessage(chatId: number, m: FlowMessage): Promise<void> {
+  await sendMessage(chatId, m.text, {
+    replyMarkup: m.replyMarkup,
+    forceReply: m.forceReply,
+  });
 }

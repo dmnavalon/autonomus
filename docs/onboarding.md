@@ -1,64 +1,77 @@
-# Onboarding — vincular tus apps al bot
+# Onboarding — empezar a trabajar con el bot
 
-Este documento describe cómo decirle al bot de Telegram a qué app(s)
-corresponde cada solicitud.
+Este documento describe cómo elegir, crear o vincular un proyecto desde Telegram, sin tipear comandos técnicos.
 
-## Modelo
+## Cómo se eligen los proyectos
 
-Cada solicitud que envías al bot necesita saber sobre qué app aplica:
-- Si tu solicitud es **`software_nuevo`**, no necesitas linkear nada — la
-  fábrica crea el repo y lo agrega al registry sola.
-- Si tu solicitud es **`bug`, `feature`, `cambio_visual`, `qa_only` o
-  `refactor`**, el bot necesita saber qué app es la objetivo. Para eso vas a
-  tener que **linkear** la app primero.
+El bot mantiene un proyecto activo por usuario. Cada respuesta del bot lo
+muestra en el header:
 
-## Modelo de proyecto activo
+```
+📁 Proyecto: <nombre>
+```
 
-El bot mantiene un *sticky context* por chat_id: cuando eliges un proyecto,
-el siguiente mensaje asume el mismo proyecto, hasta que cambies con `/use`.
+Cuando mandás un mensaje:
 
-Resolución por mensaje (en orden):
+1. Si tenés un proyecto activo, se usa ese y se crea el Issue.
+2. Si tenés varios proyectos pero ninguno activo, el bot te muestra una lista
+   de botones para elegir.
+3. Si tenés un solo proyecto, se usa automáticamente y queda como activo.
+4. Si no tenés ninguno, el bot te muestra un menú con tres opciones:
 
-1. **Sticky**: si tienes `last_active_slug` y todavía está autorizado, se usa.
-2. **Única app**: si tienes solo una app linkeada, se usa y se vuelve sticky.
-3. **N apps sin sticky**: el bot abre el Issue con `state:pending-app-selection`
-   y te muestra botones inline para que elijas. Cuando clickeas, el Issue
-   se transiciona a `state:received` y el flujo arranca.
-4. **Cero apps**: el bot te muestra el menú de onboarding (este documento).
+```
+[➕ Crear proyecto]
+[🔗 Vincular GitHub]
+[❌ Cancelar]
+```
 
-## Comandos del bot
+## Crear un proyecto nuevo (asistente, 4 pasos)
 
-| Comando | Descripción |
+1. Click en **➕ Crear proyecto**.
+2. El bot pregunta: *"¿Cómo quieres llamar a tu proyecto?"*. Respondes con un
+   nombre humano (ej. `Cotizador de vuelos`).
+3. *"¿Una descripción corta?"* (opcional, escribí `skip` para saltar).
+4. *"¿Qué tipo de app es?"* — elegí entre `Web`, `SaaS`, `Dashboard`, `Bot`,
+   `API`, `Otro`.
+5. El bot te muestra un resumen con el nombre interno auto-generado (ej.
+   `cotizador-de-vuelos`) y el repo destino. Click en **✅ Confirmar**.
+
+Al confirmar, el bot:
+
+- Crea un repo privado nuevo en `dmnavalon/<nombre-interno>`.
+- Abre un PR en `dmnavalon/autonomus` agregando tu proyecto al registro.
+- Te manda el link del repo y del PR.
+
+Para que el bot empiece a aceptar solicitudes sobre ese proyecto, **mergea el
+PR**. ~60 segundos después ya está activo.
+
+## Vincular un proyecto existente de GitHub
+
+1. Click en **🔗 Vincular GitHub**.
+2. El bot lista tus repos disponibles (excluyendo los ya vinculados, los
+   archivados y los forks). Hasta 8 por página, con paginación.
+3. Click en el repo que querés vincular.
+4. El bot pregunta: *"¿Cómo quieres llamar a este proyecto en el bot?"*. Si
+   escribís `skip` usa el nombre del repo.
+5. Abre un PR en `dmnavalon/autonomus`. Mergealo y el proyecto queda activo.
+
+## Comandos útiles
+
+| Comando | Para qué sirve |
 |---|---|
-| `/start`, `/id`, `/whoami` | Devuelve tu chat_id (incluso sin auth). |
-| `/apps` | Lista tus apps linkeadas, marca la activa. |
-| `/use <slug>` | Cambia el proyecto activo. |
-| `/current` | Muestra el proyecto activo. |
-| `/link <slug> <owner/repo>` | Abre PR para linkear app existente. |
-| `/help` | Lista los comandos. |
+| `/apps` | Lista tus proyectos vinculados |
+| `/use <nombre>` | Cambia el proyecto activo (acepta nombre o slug, prefijo) |
+| `/current` | Muestra el proyecto activo |
+| `/cancel` | Aborta el asistente actual |
+| `/help` | Lista los comandos |
+| `/start`, `/id`, `/whoami` | Devuelve tu chat_id |
 
-Cualquier mensaje que no empiece con `/` se trata como solicitud sobre el
-proyecto activo (o dispara el menú de selección si no hay activo).
+## Modo avanzado (opcional)
 
-## Cada respuesta del bot lleva header
-
-El bot prepende a cada mensaje:
+Si preferís no usar el asistente, también podés escribir el comando manual:
 
 ```
-📁 Proyecto: <slug>
-```
-
-Si no hay activo: `📁 Proyecto: (sin elegir)`.
-
-## Linkear una app existente — paso a paso
-
-**Pre-requisito.** El código de tu app debe vivir en GitHub bajo tu cuenta
-`dmnavalon` (cualquier repo, público o privado).
-
-### Opción A — desde Telegram (recomendado)
-
-```
-/link <slug> <owner/repo>
+/link <nombre-interno> <usuario/repo>
 ```
 
 Ejemplo:
@@ -67,50 +80,16 @@ Ejemplo:
 /link mi-tienda dmnavalon/mi-tienda-online
 ```
 
-El bot abre un PR sobre `dmnavalon/autonomus` que agrega tu app a
-`registry/apps.json`. Tienes que mergear ese PR para activar el linkeo.
-Después de mergear, espera ~60s (cache del webhook) y ya puedes mandarle
-solicitudes al bot sobre esa app.
+El nombre interno (`slug`) debe ser kebab-case lowercase, ≤30 caracteres.
+El bot abre un PR de la misma forma que el asistente.
 
-**Reglas para el slug:**
-- lowercase kebab-case
-- empieza con letra
-- ≤ 30 caracteres
+## Crear una app desde cero con código generado por IA
 
-**Reglas para el repo:**
-- formato `owner/name`
+Si en lugar de "vincular un repo que ya existe" o "crear un repo vacío" querés
+que la fábrica genere código desde cero (UI + backend basados en una
+descripción), describí la app directamente:
 
-### Opción B — manual
+> "Quiero una app para subir una foto y detectar colores"
 
-1. Clona el repo: `gh repo clone dmnavalon/autonomus`
-2. Edita `registry/apps.json` y agrega:
-   ```json
-   {
-     "slug": "mi-tienda",
-     "repo": "dmnavalon/mi-tienda-online",
-     "default_branch": "main",
-     "stack": "nextjs",
-     "vercel_project_id": null,
-     "owner_chat_id": <tu chat_id>,
-     "collaborators": [],
-     "created_at": "2026-05-05T00:00:00Z"
-   }
-   ```
-3. Commit + push.
-4. Espera ~60s para que el cache expire.
-
-## Crear una app nueva (no linkear)
-
-No uses `/link`. Solo describe la app:
-
-> Quiero una app para subir una foto y detectar colores
-
-El bot detecta `software_nuevo`, abre Issue, y la fábrica:
-
-1. Crea el repo `dmnavalon/<slug>` desde el template.
-2. Crea el proyecto Vercel.
-3. Agrega la entrada en `registry/apps.json`.
-4. Abre PR inicial con la feature pedida.
-
-Phase 5 conecta esto a Vercel automáticamente. Mientras tanto, después del
-linkeo manual del repo creado, el slug queda disponible para más solicitudes.
+El bot detecta esto como tipo `software_nuevo` y la fábrica se encarga de
+crear el repo + scaffolding + primer feature.

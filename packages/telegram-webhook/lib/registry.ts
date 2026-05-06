@@ -22,6 +22,8 @@ export interface UsersRegistry {
 
 export interface RegistryApp {
   slug: string;
+  /** Display name shown in the bot UI. Falls back to slug when absent. */
+  label?: string;
   repo: string;
   default_branch: string;
   stack: 'nextjs' | 'sveltekit' | 'astro' | 'other';

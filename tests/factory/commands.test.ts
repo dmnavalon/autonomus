@@ -33,7 +33,7 @@ describe('commands', () => {
     vi.spyOn(registry, 'getLinkedApps').mockResolvedValue([]);
     vi.spyOn(registry, 'getLastActiveSlug').mockResolvedValue(null);
     const r = await dispatchCommand('/apps', 1, 'd');
-    expect(r?.text).toMatch(/no tienes apps/i);
+    expect(r?.text).toMatch(/no tienes proyectos/i);
   });
 
   it('/use <slug> sets sticky when slug is authorized', async () => {
@@ -50,10 +50,11 @@ describe('commands', () => {
     const setter = vi.spyOn(registry, 'setLastActiveSlug').mockResolvedValue(undefined);
     const r = await dispatchCommand('/use ghost', 1, 'd');
     expect(setter).not.toHaveBeenCalled();
-    expect(r?.text).toMatch(/no tienes acceso/i);
+    expect(r?.text).toMatch(/no encuentro/i);
   });
 
   it('/current shows active project', async () => {
+    vi.spyOn(registry, 'getLinkedApps').mockResolvedValue([APP_A]);
     vi.spyOn(registry, 'getLastActiveSlug').mockResolvedValue('app-a');
     const r = await dispatchCommand('/current', 1, 'd');
     expect(r?.text).toMatch(/app-a/);
@@ -78,7 +79,7 @@ describe('commands', () => {
   it('/link rejects malformed args', async () => {
     vi.spyOn(registry, 'getLastActiveSlug').mockResolvedValue(null);
     const r = await dispatchCommand('/link onlyone', 1, 'd');
-    expect(r?.text).toMatch(/Uso/);
+    expect(r?.text).toMatch(/Modo avanzado|usuario\/repo/i);
   });
 
   it('/link rejects invalid slug', async () => {

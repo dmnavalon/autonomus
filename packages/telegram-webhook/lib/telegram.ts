@@ -12,6 +12,8 @@ interface SendOpts {
   parseMode?: 'Markdown' | 'HTML';
   disablePreview?: boolean;
   replyMarkup?: InlineKeyboardMarkup;
+  /** When true, Telegram forces the user's next message to be a reply to this one. */
+  forceReply?: boolean;
 }
 
 function token(): string {
@@ -34,12 +36,15 @@ async function call(method: string, body: object): Promise<unknown> {
 }
 
 export async function sendMessage(chatId: number, text: string, opts: SendOpts = {}): Promise<void> {
+  const reply_markup = opts.forceReply
+    ? { force_reply: true, selective: true }
+    : opts.replyMarkup;
   await call('sendMessage', {
     chat_id: chatId,
     text,
     parse_mode: opts.parseMode ?? 'Markdown',
     disable_web_page_preview: opts.disablePreview ?? true,
-    reply_markup: opts.replyMarkup,
+    reply_markup,
   });
 }
 

@@ -107,32 +107,27 @@ export async function attachAppSlug(issueNumber: number, slug: string): Promise<
   });
 }
 
-/**
- * Opens a PR on dmnavalon/autonomus that adds a new entry to registry/apps.json.
- * Used by /link command. Branch: registry/link-<slug>-<timestamp>.
- */
-export async function openLinkAppPR(args: {
+interface AppEntry {
   slug: string;
+  label?: string;
   repo: string;
-  ownerChatId: number;
-  username: string | undefined;
-}): Promise<{ number: number; url: string }> {
+  default_branch: string;
+  stack: 'nextjs' | 'sveltekit' | 'astro' | 'other';
+  vercel_project_id: string | null;
+  owner_chat_id: number;
+  collaborators: number[];
+  created_at: string;
+  notes: string;
+}
+
+interface AppsFile {
+  version: 1;
+  $schema?: string;
+  apps: AppEntry[];
+}
+
+async function readAppsFile(): Promise<{ data: AppsFile; sha: string }> {
   const o = getOctokit();
-
-  const baseRef = await o.git.getRef({
-    owner: FACTORY_OWNER,
-    repo: FACTORY_REPO_NAME,
-    ref: 'heads/main',
-  });
-  const branchName = `registry/link-${args.slug}-${Date.now()}`;
-  await o.git.createRef({
-    owner: FACTORY_OWNER,
-    repo: FACTORY_REPO_NAME,
-    ref: `refs/heads/${branchName}`,
-    sha: baseRef.data.object.sha,
-  });
-
-  // Read current apps.json on main
   const file = await o.repos.getContent({
     owner: FACTORY_OWNER,
     repo: FACTORY_REPO_NAME,
@@ -142,15 +137,62 @@ export async function openLinkAppPR(args: {
   if (Array.isArray(file.data) || file.data.type !== 'file') {
     throw new Error('registry/apps.json is not a file');
   }
-  const current = JSON.parse(
-    Buffer.from(file.data.content, file.data.encoding as BufferEncoding).toString('utf8'),
-  ) as { version: 1; $schema?: string; apps: unknown[] };
+  const decoded = Buffer.from(file.data.content, file.data.encoding as BufferEncoding).toString('utf8');
+  return { data: JSON.parse(decoded) as AppsFile, sha: file.data.sha };
+}
 
-  if ((current.apps as Array<{ slug: string }>).some((a) => a.slug === args.slug)) {
+async function writeAppsFileOnBranch(
+  branch: string,
+  next: AppsFile,
+  sha: string,
+  message: string,
+): Promise<void> {
+  await getOctokit().repos.createOrUpdateFileContents({
+    owner: FACTORY_OWNER,
+    repo: FACTORY_REPO_NAME,
+    path: 'registry/apps.json',
+    branch,
+    message,
+    content: Buffer.from(JSON.stringify(next, null, 2) + '\n', 'utf8').toString('base64'),
+    sha,
+  });
+}
+
+async function createBranchFromMain(branchName: string): Promise<void> {
+  const o = getOctokit();
+  const baseRef = await o.git.getRef({
+    owner: FACTORY_OWNER,
+    repo: FACTORY_REPO_NAME,
+    ref: 'heads/main',
+  });
+  await o.git.createRef({
+    owner: FACTORY_OWNER,
+    repo: FACTORY_REPO_NAME,
+    ref: `refs/heads/${branchName}`,
+    sha: baseRef.data.object.sha,
+  });
+}
+
+/**
+ * Opens a PR on dmnavalon/autonomus that adds a new entry to registry/apps.json.
+ * Used by /link command and the conversational link wizard.
+ */
+export async function openLinkAppPR(args: {
+  slug: string;
+  label?: string;
+  repo: string;
+  ownerChatId: number;
+  username: string | undefined;
+}): Promise<{ number: number; url: string }> {
+  const o = getOctokit();
+  const branchName = `registry/link-${args.slug}-${Date.now()}`;
+  await createBranchFromMain(branchName);
+
+  const { data, sha } = await readAppsFile();
+  if (data.apps.some((a) => a.slug === args.slug)) {
     throw new Error(`slug already linked: ${args.slug}`);
   }
-
-  current.apps.push({
+  const newEntry: AppEntry = {
     slug: args.slug,
     repo: args.repo,
     default_branch: 'main',
@@ -159,36 +201,125 @@ export async function openLinkAppPR(args: {
     owner_chat_id: args.ownerChatId,
     collaborators: [],
     created_at: new Date().toISOString(),
-    notes: `Linked via Telegram /link by ${args.username ?? 'unknown'}.`,
-  });
+    notes: `Linked via Telegram by ${args.username ?? 'unknown'}.`,
+  };
+  if (args.label) newEntry.label = args.label;
+  data.apps.push(newEntry);
 
-  await o.repos.createOrUpdateFileContents({
-    owner: FACTORY_OWNER,
-    repo: FACTORY_REPO_NAME,
-    path: 'registry/apps.json',
-    branch: branchName,
-    message: `chore(registry): link app ${args.slug} (${args.repo})`,
-    content: Buffer.from(JSON.stringify(current, null, 2) + '\n', 'utf8').toString('base64'),
-    sha: file.data.sha,
-  });
+  await writeAppsFileOnBranch(
+    branchName,
+    data,
+    sha,
+    `chore(registry): link app ${args.slug} (${args.repo})`,
+  );
 
   const pr = await o.pulls.create({
     owner: FACTORY_OWNER,
     repo: FACTORY_REPO_NAME,
-    title: `Link app ${args.slug}`,
+    title: `Link app ${args.label ?? args.slug}`,
     head: branchName,
     base: 'main',
     body: [
-      '## /link request',
+      '## Link app request',
       '',
+      `- label: \`${args.label ?? args.slug}\``,
       `- slug: \`${args.slug}\``,
       `- repo: \`${args.repo}\``,
       `- owner_chat_id: \`${args.ownerChatId}\``,
       `- requested_by: ${args.username ?? '(unknown username)'}`,
       '',
-      'Mergea este PR para activar el linkeo. El cache del webhook expira 60s después.',
+      'Mergea este PR para activar el linkeo. El cache del webhook expira ~60s después.',
     ].join('\n'),
   });
 
   return { number: pr.data.number, url: pr.data.html_url };
+}
+
+/**
+ * Wizard "Crear proyecto":
+ *  1. Creates the GitHub repo (private, initialized with README) under the
+ *     authenticated user's account (typically `dmnavalon`).
+ *  2. Opens a PR on dmnavalon/autonomus adding the entry to registry/apps.json.
+ *
+ * The repo is created first so it's navigable immediately; the PR-merge step
+ * only activates routing inside the bot.
+ */
+export async function openCreateProjectPR(args: {
+  slug: string;
+  label: string;
+  description: string | undefined;
+  type: 'web' | 'saas' | 'dashboard' | 'bot' | 'api' | 'otro';
+  ownerChatId: number;
+  username: string | undefined;
+}): Promise<{ repoUrl: string; pr: { number: number; url: string } }> {
+  const o = getOctokit();
+
+  const repo = await o.repos.createForAuthenticatedUser({
+    name: args.slug,
+    description: args.description?.slice(0, 100) || `Generado por Autonomus (${args.label})`,
+    private: true,
+    auto_init: true,
+  });
+  const fullRepo = repo.data.full_name;
+
+  const branchName = `registry/create-${args.slug}-${Date.now()}`;
+  await createBranchFromMain(branchName);
+  const { data, sha } = await readAppsFile();
+  if (data.apps.some((a) => a.slug === args.slug)) {
+    throw new Error(`slug already in registry: ${args.slug}`);
+  }
+  const notesParts: string[] = [`Created via Telegram wizard by ${args.username ?? 'unknown'}.`];
+  notesParts.push(`type=${args.type}`);
+  if (args.type === 'bot' || args.type === 'api') {
+    notesParts.push('Phase 4.5 will branch scaffolding by stack.');
+  }
+  if (args.description) notesParts.push(`description: ${args.description}`);
+  const newEntry: AppEntry = {
+    slug: args.slug,
+    label: args.label,
+    repo: fullRepo,
+    default_branch: 'main',
+    stack: 'nextjs',
+    vercel_project_id: null,
+    owner_chat_id: args.ownerChatId,
+    collaborators: [],
+    created_at: new Date().toISOString(),
+    notes: notesParts.join(' | '),
+  };
+  data.apps.push(newEntry);
+
+  await writeAppsFileOnBranch(
+    branchName,
+    data,
+    sha,
+    `chore(registry): create project ${args.slug} (${fullRepo})`,
+  );
+
+  const pr = await o.pulls.create({
+    owner: FACTORY_OWNER,
+    repo: FACTORY_REPO_NAME,
+    title: `Create project: ${args.label}`,
+    head: branchName,
+    base: 'main',
+    body: [
+      '## Create project (vía wizard de Telegram)',
+      '',
+      `- label: \`${args.label}\``,
+      `- slug: \`${args.slug}\``,
+      `- repo: \`${fullRepo}\` (creado, privado, initialized)`,
+      `- tipo: ${args.type}`,
+      args.description ? `- descripción: ${args.description}` : null,
+      `- owner_chat_id: \`${args.ownerChatId}\``,
+      `- requested_by: ${args.username ?? '(unknown username)'}`,
+      '',
+      'Mergea este PR para activar el linkeo en el bot. El repo ya está creado.',
+    ]
+      .filter((l): l is string => l !== null)
+      .join('\n'),
+  });
+
+  return {
+    repoUrl: repo.data.html_url,
+    pr: { number: pr.data.number, url: pr.data.html_url },
+  };
 }

@@ -12,6 +12,12 @@
         "required": ["slug", "repo", "default_branch", "stack", "owner_chat_id"],
         "properties": {
           "slug": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,29}$" },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "Display name shown in the bot UI. Falls back to slug when absent."
+          },
           "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
           "default_branch": { "type": "string" },
           "stack": { "type": "string", "enum": ["nextjs", "sveltekit", "astro", "other"] },
