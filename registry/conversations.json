@@ -1,5 +1,98 @@
 {
   "$schema": "./conversations.schema.json",
   "version": 1,
-  "conversations": []
+  "conversations": [
+    {
+      "chat_id": 8676856542,
+      "wizard": "link-repo",
+      "step": "pick-gh",
+      "draft": {
+        "candidates": [
+          {
+            "owner": "dmnavalon",
+            "name": "dashboard-saas-faind"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "albatros"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "gastos2"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "fechit"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "faind-social-cms"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "mejoras-faind-web"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "maqueta_faind"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "padel-torneo"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "padel"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "faind-dashboard"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "aerolineas"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "Gothia"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "cuentas"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "transcrip"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "testcodex"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "LandingPage"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "TipTab"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "TAKA"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "Probando-GIT"
+          },
+          {
+            "owner": "dmnavalon",
+            "name": "pruebasGIT"
+          }
+        ],
+        "page": 0
+      },
+      "started_at": "2026-05-06T19:23:45.880Z",
+      "expires_at": "2026-05-06T19:53:45.880Z"
+    }
+  ]
 }
