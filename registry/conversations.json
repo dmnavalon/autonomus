@@ -1,5 +1,1 @@
-{
-  "$schema": "./conversations.schema.json",
-  "version": 1,
-  "conversations": []
-}
+{"$schema":"./conversations.schema.json","version":1,"conversations":[]}
