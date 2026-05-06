@@ -67,16 +67,25 @@ export async function POST(req: Request): Promise<Response> {
   if (!isValidWebhookRequest(req)) {
     return new Response('forbidden', { status: 403 });
   }
-  const update = (await req.json().catch(() => null)) as TelegramUpdate | null;
-  if (!update) return Response.json({ ok: true, skipped: 'no-body' });
+  try {
+    const update = (await req.json().catch(() => null)) as TelegramUpdate | null;
+    if (!update) return Response.json({ ok: true, skipped: 'no-body' });
 
-  if (update.callback_query) {
-    return handleCallbackQuery(update.callback_query);
+    if (update.callback_query) {
+      return await handleCallbackQuery(update.callback_query);
+    }
+    if (update.message?.text) {
+      return await handleMessage(update.message);
+    }
+    return Response.json({ ok: true, skipped: 'no-text-or-callback' });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'unknown';
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error('[webhook] handler crashed:', detail);
+    if (stack) console.error(stack);
+    // Return 200 so Telegram doesn't retry the same broken update forever.
+    return Response.json({ ok: false, error: detail.slice(0, 300) }, { status: 200 });
   }
-  if (update.message?.text) {
-    return handleMessage(update.message);
-  }
-  return Response.json({ ok: true, skipped: 'no-text-or-callback' });
 }
 
 // ---------------------------------------------------------------------------

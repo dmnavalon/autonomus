@@ -39,7 +39,7 @@ echo "Setting Telegram webhook to: $URL"
 RES="$(curl -sS -X POST \
   "https://api.telegram.org/bot${TG_TOKEN}/setWebhook" \
   -H 'Content-Type: application/json' \
-  --data "$(printf '{"url":"%s","secret_token":"%s","drop_pending_updates":true,"allowed_updates":["message"]}' "$URL" "$SECRET")")"
+  --data "$(printf '{"url":"%s","secret_token":"%s","drop_pending_updates":true,"allowed_updates":["message","callback_query"]}' "$URL" "$SECRET")")"
 
 if echo "$RES" | grep -q '"ok":true'; then
   echo "  ✓ Webhook set."

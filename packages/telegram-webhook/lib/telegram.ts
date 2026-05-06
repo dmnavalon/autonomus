@@ -9,7 +9,11 @@ import type { InlineKeyboardMarkup } from './inline-keyboard';
 const TELEGRAM_API = 'https://api.telegram.org';
 
 interface SendOpts {
-  parseMode?: 'Markdown' | 'HTML';
+  /**
+   * Default is plain text (no parse_mode) because legacy Markdown breaks on stray
+   * underscores (chat_id, file_path, etc.). Pass 'HTML' for explicit formatting.
+   */
+  parseMode?: 'Markdown' | 'HTML' | 'plain';
   disablePreview?: boolean;
   replyMarkup?: InlineKeyboardMarkup;
   /** When true, Telegram forces the user's next message to be a reply to this one. */
@@ -39,13 +43,31 @@ export async function sendMessage(chatId: number, text: string, opts: SendOpts =
   const reply_markup = opts.forceReply
     ? { force_reply: true, selective: true }
     : opts.replyMarkup;
+  // Default = plain text. Markdown breaks on stray `_` (chat_id, etc.); we
+  // strip Markdown markers from `text` so messages still look reasonable
+  // when authors used `*bold*` or backticks.
+  const useMarkdown = opts.parseMode === 'Markdown' || opts.parseMode === 'HTML';
+  const finalText = useMarkdown ? text : stripMarkdownMarkers(text);
   await call('sendMessage', {
     chat_id: chatId,
-    text,
-    parse_mode: opts.parseMode ?? 'Markdown',
+    text: finalText,
+    parse_mode: useMarkdown ? opts.parseMode : undefined,
     disable_web_page_preview: opts.disablePreview ?? true,
     reply_markup,
   });
+}
+
+/**
+ * Removes Markdown wrappers so plain-text messages don't show the asterisks
+ * and backticks literally. Conservative: only handles the simple cases we
+ * actually emit (`*bold*`, `` `code` `` , `[text](url)`).
+ */
+function stripMarkdownMarkers(s: string): string {
+  return s
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
+    // [text](url) → "text (url)" so Telegram autolinks the URL.
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)');
 }
 
 export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
