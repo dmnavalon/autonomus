@@ -1,5 +1,18 @@
 {
   "$schema": "./apps.schema.json",
   "version": 1,
-  "apps": []
+  "apps": [
+    {
+      "slug": "dashboard-saas-faind",
+      "repo": "dmnavalon/dashboard-saas-faind",
+      "default_branch": "main",
+      "stack": "nextjs",
+      "vercel_project_id": null,
+      "owner_chat_id": 8676856542,
+      "collaborators": [],
+      "created_at": "2026-05-06T21:45:41.469Z",
+      "notes": "Linked via Telegram by dmnavalon.",
+      "label": "dashboard-saas-faind"
+    }
+  ]
 }
