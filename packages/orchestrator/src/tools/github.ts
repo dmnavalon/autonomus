@@ -99,12 +99,16 @@ export async function addLabel(issueNumber: number, label: string): Promise<void
 
 /**
  * Parses the auto-created Issue body emitted by the Telegram webhook to recover
- * chat_id, username, and the original raw text.
+ * chat_id, username, app_slug, and the original raw text.
+ *
+ * `appSlug` is null when the body has `app_slug: \`(pending)\`` (issue still in
+ * state:pending-app-selection) or when the field is missing entirely.
  */
 export function parseTelegramJobBody(body: string): {
   rawText: string;
   chatId: number | null;
   username: string | undefined;
+  appSlug: string | null;
 } {
   const rawMatch = body.match(/## Solicitud original\s*\n+>([\s\S]*?)\n##/);
   const rawText = rawMatch?.[1]?.trim().replace(/^>\s?/gm, '').trim() ?? '';
@@ -112,7 +116,10 @@ export function parseTelegramJobBody(body: string): {
   const chatId = chatIdMatch ? Number(chatIdMatch[1]) : null;
   const usernameMatch = body.match(/username:\s*`([^`]*)`/);
   const username = usernameMatch && usernameMatch[1] !== '(none)' ? usernameMatch[1] : undefined;
-  return { rawText, chatId, username };
+  const slugMatch = body.match(/app_slug:\s*`([^`]*)`/);
+  const slug = slugMatch?.[1] ?? null;
+  const appSlug = !slug || slug === '(pending)' ? null : slug;
+  return { rawText, chatId, username, appSlug };
 }
 
 export const FACTORY_REPO = { owner: FACTORY_OWNER, name: FACTORY_NAME };

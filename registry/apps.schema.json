@@ -17,6 +17,11 @@
           "stack": { "type": "string", "enum": ["nextjs", "sveltekit", "astro", "other"] },
           "vercel_project_id": { "type": ["string", "null"] },
           "owner_chat_id": { "type": ["integer", "null"] },
+          "collaborators": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "Additional chat_ids allowed to send jobs against this app (besides owner)."
+          },
           "created_at": { "type": "string", "format": "date-time" },
           "notes": { "type": "string" }
         }

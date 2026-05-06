@@ -8,6 +8,7 @@ export interface RecepcionistaInput {
   raw_message: string;
   chat_id: number;
   username: string | undefined;
+  app_slug: string | null;
 }
 
 export async function runRecepcionista(

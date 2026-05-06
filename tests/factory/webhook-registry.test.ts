@@ -19,6 +19,14 @@ describe('registry loader', () => {
     vi.restoreAllMocks();
   });
 
+  /** Wraps a JSON registry value in the shape returned by the GitHub Contents API. */
+  function ghContentsResponse(value: unknown): Response {
+    const content = Buffer.from(JSON.stringify(value), 'utf8').toString('base64');
+    return new Response(JSON.stringify({ content, encoding: 'base64', sha: 'abc' }), {
+      status: 200,
+    });
+  }
+
   it('parses users.json with multiple authorized chat_ids', async () => {
     const fixture = {
       version: 1,
@@ -28,9 +36,7 @@ describe('registry loader', () => {
         { chat_id: null, username: 'c', role: 'viewer' },
       ],
     };
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify(fixture), { status: 200 }),
-    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(ghContentsResponse(fixture));
 
     const reg = await loadUsersRegistry();
     expect(reg.users).toHaveLength(3);
@@ -39,39 +45,30 @@ describe('registry loader', () => {
 
   it('isAuthorizedChatId returns true for known chat_id', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          version: 1,
-          users: [{ chat_id: 12345, username: 'diego', role: 'owner' }],
-        }),
-        { status: 200 },
-      ),
+      ghContentsResponse({
+        version: 1,
+        users: [{ chat_id: 12345, username: 'diego', role: 'owner' }],
+      }),
     );
     expect(await isAuthorizedChatId(12345)).toBe(true);
   });
 
   it('isAuthorizedChatId returns false for unknown chat_id', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          version: 1,
-          users: [{ chat_id: 12345, username: 'diego', role: 'owner' }],
-        }),
-        { status: 200 },
-      ),
+      ghContentsResponse({
+        version: 1,
+        users: [{ chat_id: 12345, username: 'diego', role: 'owner' }],
+      }),
     );
     expect(await isAuthorizedChatId(99999)).toBe(false);
   });
 
   it('null chat_id placeholders never match', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          version: 1,
-          users: [{ chat_id: null, username: 'placeholder', role: 'owner' }],
-        }),
-        { status: 200 },
-      ),
+      ghContentsResponse({
+        version: 1,
+        users: [{ chat_id: null, username: 'placeholder', role: 'owner' }],
+      }),
     );
     // even passing 0 / NaN should not auth-bypass
     expect(await isAuthorizedChatId(0)).toBe(false);

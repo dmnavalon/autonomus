@@ -9,6 +9,7 @@ REPO="${1:-dmnavalon/autonomus}"
 # Format: name|color|description
 LABELS=(
   # State machine
+  "state:pending-app-selection|FBCA04|Webhook esperando que el usuario elija el proyecto activo"
   "state:received|0E8A16|Job recibido, pendiente de clasificación"
   "state:classifying|FBCA04|Clasificación en curso"
   "state:planning|FBCA04|Planificación + arquitectura en curso"

@@ -54,4 +54,18 @@ describe('parseTelegramJobBody', () => {
     const b = body.replace('`Diego`', '`(none)`');
     expect(parseTelegramJobBody(b).username).toBeUndefined();
   });
+
+  it('returns null appSlug when missing or pending', () => {
+    expect(parseTelegramJobBody(body).appSlug).toBeNull();
+    const pending = body.replace('username: `Diego`', 'username: `Diego`\n- app_slug: `(pending)`');
+    expect(parseTelegramJobBody(pending).appSlug).toBeNull();
+  });
+
+  it('extracts app_slug when present', () => {
+    const withSlug = body.replace(
+      'username: `Diego`',
+      'username: `Diego`\n- app_slug: `mi-tienda`',
+    );
+    expect(parseTelegramJobBody(withSlug).appSlug).toBe('mi-tienda');
+  });
 });

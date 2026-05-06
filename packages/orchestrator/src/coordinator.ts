@@ -134,6 +134,7 @@ async function runIntakeAndPlanning(issue: IssueSnapshot, ledger: JobLedger): Pr
     raw_message: meta.rawText || issue.title,
     chat_id: meta.chatId ?? 0,
     username: meta.username,
+    app_slug: meta.appSlug,
   });
   ledger.record('recepcionista', recepResult.model, recepResult.usage);
   await postAgentComment(issueNumber, 'recepcionista', recepResult.model, recepResult.output, recepResult.usage);
@@ -154,10 +155,11 @@ async function runIntakeAndPlanning(issue: IssueSnapshot, ledger: JobLedger): Pr
   }
 
   // ---------- step 2: Clasificador -------------------------------------
+  const appContext = meta.appSlug ? { exists: true, slug: meta.appSlug } : null;
   const claResult = await runClasificador({
     texto_limpio: recepResult.output.texto_limpio,
     intencion_inicial: recepResult.output.intencion_inicial,
-    app_context: null, // Phase 4 will populate this from registry/apps.json
+    app_context: appContext,
   });
   ledger.record('clasificador', claResult.model, claResult.usage);
   await postAgentComment(issueNumber, 'clasificador', claResult.model, claResult.output, claResult.usage);
@@ -197,7 +199,7 @@ async function runIntakeAndPlanning(issue: IssueSnapshot, ledger: JobLedger): Pr
     texto_limpio: recepResult.output.texto_limpio,
     tipo: claResult.output.tipo,
     complejidad: claResult.output.complejidad,
-    app_context: null,
+    app_context: meta.appSlug ? { slug: meta.appSlug } : null,
   });
   ledger.record('planificador', planResult.model, planResult.usage);
   await postAgentComment(issueNumber, 'planificador', planResult.model, planResult.output, planResult.usage);
