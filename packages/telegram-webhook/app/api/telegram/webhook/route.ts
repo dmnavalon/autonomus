@@ -158,10 +158,24 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
   if (chitchat) {
     const sticky = await import('@/lib/registry').then((m) => m.getLastActiveSlug(chatId));
     const reply = sticky
-      ? `${chitchat} Estás en el proyecto *${sticky}*. Cuando quieras pedirme algo, escríbelo directamente.`
+      ? `${chitchat} Estás en el proyecto ${sticky}. Cuando quieras pedirme algo, escríbelo directamente.`
       : `${chitchat} Cuando quieras empezar, dime qué necesitas o usa /new para crear un proyecto.`;
     await sendMessage(chatId, withHeader(sticky, reply));
     return Response.json({ ok: true, mode: 'chitchat' });
+  }
+
+  // Vague-task filter — "quiero mandar un bug" has intent but no actual content.
+  // Ask for the real description before creating any Issue.
+  if (looksLikeVagueTask(text)) {
+    const sticky = await import('@/lib/registry').then((m) => m.getLastActiveSlug(chatId));
+    await sendMessage(
+      chatId,
+      withHeader(
+        sticky,
+        '¿Qué necesitás exactamente? Describílo con detalle (qué pasa, cómo reproducirlo, qué esperabas) y lo proceso enseguida.',
+      ),
+    );
+    return Response.json({ ok: true, mode: 'vague-task' });
   }
 
   // Free-text message — software_nuevo intent shortcut (no project resolution needed).
@@ -191,22 +205,34 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
     return Response.json({ ok: true, mode: 'welcome' });
   }
 
-  if (r.status === 'sticky' || r.status === 'unique') {
-    if (r.status === 'unique') await setLastActiveSlug(chatId, r.app.slug);
-    const issue = await createJobIssue({
-      message: text,
-      chatId,
-      username,
-      appSlug: r.app.slug,
-    });
+  if (r.status === 'sticky') {
+    const issue = await createJobIssue({ message: text, chatId, username, appSlug: r.app.slug });
     await sendMessage(
       chatId,
       withHeader(
         r.app.slug,
-        `✅ Recibido. Job [#${issue.number}](${issue.url}) en *${appDisplayName(r.app)}*.\nCuando esté listo te aviso aquí.`,
+        `✅ Recibido. Job #${issue.number} en ${appDisplayName(r.app)}.\nCuando esté listo te aviso aquí.`,
       ),
     );
-    return Response.json({ ok: true, issue: issue.number, mode: r.status });
+    return Response.json({ ok: true, issue: issue.number, mode: 'sticky' });
+  }
+
+  if (r.status === 'unique') {
+    // One project exists but no sticky (user did /out). Create the Issue in pending
+    // state and ask for a one-tap confirmation — same pattern as 'multiple'.
+    const issue = await createJobIssue({
+      message: text,
+      chatId,
+      username,
+      appSlug: null,
+      availableAppSlugs: [r.app.slug],
+    });
+    await sendMessage(
+      chatId,
+      withHeader(null, `Job #${issue.number} listo. ¿Va para ${appDisplayName(r.app)}?`),
+      { replyMarkup: buildAppSelectionKeyboard([r.app], issue.number) },
+    );
+    return Response.json({ ok: true, issue: issue.number, mode: 'unique-confirm' });
   }
 
   // r.status === 'multiple' → ask which project
@@ -223,6 +249,19 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
     { replyMarkup: buildAppSelectionKeyboard(r.apps, issue.number) },
   );
   return Response.json({ ok: true, issue: issue.number, mode: 'pending-selection' });
+}
+
+/**
+ * Catches messages that express task intent without actual content, e.g.:
+ * "quiero mandar un bug", "tengo un error", "quiero hacer un cambio".
+ * These need clarification before an Issue can be created.
+ */
+function looksLikeVagueTask(text: string): boolean {
+  const t = text.trim();
+  const words = t.split(/\s+/).length;
+  // Must be short enough to lack a real description
+  if (words > 14) return false;
+  return /\b(quiero\s+(mandar|enviar|reportar|hacer|crear|subir)\s+(un|una)\s+(bug|error|problema|cambio|feature|mejora|tarea|solicitud|ticket|issue)|tengo\s+(un|una)\s+(bug|error|problema|duda|consulta)|hay\s+(un|una)\s+(bug|error|problema)|necesito\s+(reportar|enviar|mandar)\s+(un|una|algo)|quiero\s+reportar\s+algo)\b/i.test(t);
 }
 
 function looksLikeSoftwareNuevo(text: string): boolean {
