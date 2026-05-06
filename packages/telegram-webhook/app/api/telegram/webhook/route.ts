@@ -10,12 +10,14 @@
  */
 import { isValidWebhookRequest } from '@/lib/auth';
 import {
+  getLinkedApps,
   isAuthorizedChatId,
   setLastActiveSlug,
 } from '@/lib/registry';
 import { resolveApp } from '@/lib/apps-resolver';
 import {
   buildAppSelectionKeyboard,
+  buildWelcomeKeyboard,
   parseCallbackData,
   type ParsedCallback,
 } from '@/lib/inline-keyboard';
@@ -157,10 +159,20 @@ async function handleMessage(message: TelegramMessage): Promise<Response> {
   const chitchat = classifyChitchat(text);
   if (chitchat) {
     const sticky = await import('@/lib/registry').then((m) => m.getLastActiveSlug(chatId));
-    const reply = sticky
-      ? `${chitchat} Estás en el proyecto ${sticky}. Cuando quieras pedirme algo, escríbelo directamente.`
-      : `${chitchat} Cuando quieras empezar, dime qué necesitas o usa /new para crear un proyecto.`;
-    await sendMessage(chatId, withHeader(sticky, reply));
+    if (sticky) {
+      await sendMessage(
+        chatId,
+        withHeader(sticky, `${chitchat} Estás en el proyecto ${sticky}. Cuando quieras pedirme algo, escríbelo directamente.`),
+      );
+    } else {
+      // No active project — greet + show project picker so user can jump in.
+      const apps = await getLinkedApps(chatId);
+      await sendMessage(
+        chatId,
+        withHeader(null, `${chitchat} ¿Con qué proyecto querés trabajar?`),
+        { replyMarkup: buildWelcomeKeyboard(apps, 0) },
+      );
+    }
     return Response.json({ ok: true, mode: 'chitchat' });
   }
 
