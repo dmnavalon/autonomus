@@ -1,0 +1,71 @@
+# Reusable workflow: sends a Telegram message via the canonical Notificador phrases.
+# Reference: agents/16-telegram-notifier/instructions.md (`agent_id: 16_telegram_notifier`).
+name: notify-telegram
+
+on:
+  workflow_call:
+    inputs:
+      message_type:
+        type: string
+        required: true
+        description: terminal_success | terminal_failure | ask_user | blocked | progress
+      summary:
+        type: string
+        required: true
+      chat_id:
+        type: string
+        required: true
+      pr_url:
+        type: string
+        required: false
+        default: ""
+      preview_url:
+        type: string
+        required: false
+        default: ""
+      issue_number:
+        type: string
+        required: false
+        default: "0"
+    secrets:
+      TELEGRAM_BOT_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Build canonical message
+        id: build
+        run: |
+          case "${{ inputs.message_type }}" in
+            terminal_success)
+              TEXT="No se detectaron errores bloqueantes en QA automático. Listo para revisión humana. Preview: ${{ inputs.preview_url }}. PR: ${{ inputs.pr_url }}."
+              ;;
+            terminal_failure)
+              TEXT="La fábrica no pudo cerrar el ciclo automático. Revisa el Issue #${{ inputs.issue_number }} en GitHub. Razón: ${{ inputs.summary }}."
+              ;;
+            blocked)
+              TEXT="Acción bloqueada: ${{ inputs.summary }}. Se requiere aprobación humana antes de continuar."
+              ;;
+            *)
+              TEXT="${{ inputs.summary }}"
+              ;;
+          esac
+          # Escape for JSON.
+          ESCAPED=$(printf '%s' "$TEXT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read())[1:-1])')
+          echo "text=$ESCAPED" >> "$GITHUB_OUTPUT"
+
+      - name: Send via Telegram Bot API
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ inputs.chat_id }}
+          TEXT: ${{ steps.build.outputs.text }}
+        run: |
+          curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\": ${CHAT_ID}, \"text\": \"${TEXT}\", \"parse_mode\": \"Markdown\", \"disable_web_page_preview\": true}"

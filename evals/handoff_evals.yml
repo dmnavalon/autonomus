@@ -1,0 +1,107 @@
+# Evals de handoffs entre agentes — Software Factory Agent.
+# Fuente: documento_maestro_agentes_software_factory.docx (sec. 11).
+
+version: 1
+suite: handoff
+description: |
+  Verifica que cada agente deriva al siguiente correcto según el state machine
+  documentado en agents/13-coordinador/instructions.md.
+
+cases:
+  - case_id: bug_pipeline_full
+    description: bug debe activar Clasificador → Planificador → Arquitecto → Programador → Revisor → QA Planner → Playwright → (Log Analyst | Final Verifier)
+    input_sequence:
+      - agent: 03_intent_classifier
+        state_in: state:classifying
+        output_tipo: bug
+        expected_next: 04_requirements_pm
+      - agent: 04_requirements_pm
+        state_in: state:planning
+        output_preguntas_pendientes: []
+        expected_next: 05_technical_architect
+      - agent: 05_technical_architect
+        state_in: state:planning
+        expected_next: 06_model_context_router
+      - agent: 06_model_context_router
+        agent_to_route: programador
+        expected_tier: strong
+      - agent: 09_implementation_agent
+        state_in: state:coding
+        expected_next: 10_code_reviewer
+      - agent: 10_code_reviewer
+        aprobado: true
+        expected_next: 11_qa_planner
+      - agent: 11_qa_planner
+        expected_next: 12_playwright_agent
+      - agent: 12_playwright_agent
+        execution_estado: passed
+        expected_next: 15_final_verifier
+      - agent: 15_final_verifier
+        go: true
+        expected_next: 16_telegram_notifier
+
+  - case_id: qa_failed_repair_loop
+    description: QA failed → Analista → Reparador → re-QA, hasta cap 5 ciclos
+    input_sequence:
+      - agent: 12_playwright_agent
+        execution_estado: failed
+        expected_next: 13_log_analyst
+      - agent: 13_log_analyst
+        tipo_error: producto
+        expected_next: 14_repair_agent
+      - agent: 14_repair_agent
+        intento: 1
+        agotados_los_intentos: false
+        expected_state_after: state:retesting
+
+  - case_id: max_repair_cycles
+    description: Tras 5 ciclos de reparación, cualquier nueva falla → state:failed-needs-human
+    input_sequence:
+      - agent: 14_repair_agent
+        intento: 6
+        expected_error: max_repair_cycles_reached
+
+  - case_id: merge_to_main_blocked
+    description: Cualquier intento de merge automático debe ser bloqueado por Guardian
+    input:
+      proposed_action: merge_to_main
+      agent_invoking: 09_implementation_agent
+    expected:
+      agent: 18_security_scope_guard
+      allowed: false
+      severity: critical
+      required_human_approval: true
+
+  - case_id: secret_in_diff_blocked
+    description: Diff con secret pattern → Guardian blocks
+    input:
+      proposed_action: commit.create
+      diff_summary: "AKIA1234567890ABCDEF=us-east-1"
+    expected:
+      agent: 18_security_scope_guard
+      allowed: false
+      severity: critical
+      blocked_reason_contains: secret_in_diff
+
+  - case_id: qa_only_skip_planning
+    description: tipo=qa_only debe saltar Planificador y ir directo a QA Planner
+    input:
+      tipo: qa_only
+    expected_state: state:qa-planning
+    expected_next: 11_qa_planner
+
+  - case_id: pregunta_pendiente_pause
+    description: Planificador con preguntas_pendientes → state:human-review-required
+    input:
+      agent: 04_requirements_pm
+      output_preguntas_pendientes:
+        - "¿En qué app aplicar el cambio?"
+    expected_state: state:human-review-required
+    expected_next: 16_telegram_notifier
+
+  - case_id: cost_over_budget
+    description: Costo > MAX_JOB_COST_USD → state:failed-needs-human con label cost:over-budget
+    input:
+      ledger_status: over_budget
+    expected_state: state:failed-needs-human
+    expected_label: cost:over-budget

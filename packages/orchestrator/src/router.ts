@@ -11,6 +11,7 @@ const MODEL_BY_TIER: Record<ModelTier, string> = {
 };
 
 const DEFAULT_TIER: Record<AgentName, ModelTier> = {
+  // Phase-3 LLM agents
   recepcionista:    'cheap',
   clasificador:     'cheap',
   qa_planner:       'cheap',
@@ -23,6 +24,15 @@ const DEFAULT_TIER: Record<AgentName, ModelTier> = {
   programador:      'strong',
   reparador:        'strong',
   playwright:       'mid',
+  // Doc-maestro additions. Deterministic agents map to 'cheap' as a placeholder
+  // (chooseModel is never called for them; their agent functions skip the LLM).
+  coordinador:           'cheap', // pure orchestration, no LLM
+  protocol_binder:       'cheap',
+  github_operator:       'cheap', // deterministic
+  telegram_notifier:     'cheap', // deterministic
+  factory_evaluator:     'mid',
+  security_scope_guard:  'cheap', // deterministic + rules; LLM tiebreaker mid
+  prompt_change_manager: 'cheap',
 };
 
 export interface RouterContext {
@@ -51,6 +61,19 @@ export function chooseModel(agent: AgentName, ctx: RouterContext = {}): ModelCho
   }
   if (agent === 'analista_logs' && ctx.bloqueante === true) {
     tier = 'strong';
+  }
+  // Doc-maestro additions
+  if (agent === 'protocol_binder' && (ctx.prDiffLoc ?? 0) > 5) {
+    // > 5 agents simultaneously changed → bump to mid for cross-impact analysis
+    tier = 'mid';
+  }
+  if (agent === 'security_scope_guard' && ctx.bloqueante === true) {
+    // ambiguous case requiring textual analysis
+    tier = 'mid';
+  }
+  if (agent === 'prompt_change_manager' && (ctx.prDiffLoc ?? 0) >= 3) {
+    // ≥ 3 agents impacted → bump to mid
+    tier = 'mid';
   }
 
   const reasoningEnabled = agent === 'reparador' && (ctx.repairAttempt ?? 0) >= 3;

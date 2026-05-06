@@ -7,9 +7,23 @@ import {
   JOB_BUDGET,
 } from '../../packages/orchestrator/src/budget';
 
+// Deterministic agents (doc maestro additions). They never invoke an LLM, so their
+// input/output token caps are 0. This is correct, not a regression — they execute
+// pure TypeScript logic in src/agents/<name>.ts.
+const DETERMINISTIC_AGENTS = new Set([
+  'coordinador',
+  'github_operator',
+  'telegram_notifier',
+]);
+
 describe('budget', () => {
-  it('every agent has positive caps', () => {
+  it('every LLM agent has positive caps', () => {
     for (const [name, cap] of Object.entries(AGENT_CAPS)) {
+      if (DETERMINISTIC_AGENTS.has(name)) {
+        expect(cap.inputTokens, `${name} (deterministic) input cap`).toBe(0);
+        expect(cap.outputTokens, `${name} (deterministic) output cap`).toBe(0);
+        continue;
+      }
       expect(cap.inputTokens, `${name} input cap`).toBeGreaterThan(0);
       expect(cap.outputTokens, `${name} output cap`).toBeGreaterThan(0);
     }
