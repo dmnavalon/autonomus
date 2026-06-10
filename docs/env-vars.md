@@ -12,6 +12,7 @@ to set each one.
 | `GH_AUTOMATION_TOKEN` | GitHub API in workflows | github.com → Settings → Developer settings → PAT (scopes: `repo`, `workflow`) | GitHub Secret |
 | `VERCEL_TOKEN` | Vercel REST API | Vercel → Account → Tokens | GitHub Secret |
 | `VERCEL_TEAM_ID` | Vercel REST API | `vercel teams ls` | GitHub Secret |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | QA Playwright vs protected previews | Vercel → project → Deployment Protection → Protection Bypass for Automation | GitHub Secret |
 | `FACTORY_REPO` | Constant | Set to `dmnavalon/autonomus` | Vercel + workflow env |
 | `FACTORY_APPS_OWNER` | New-app creation | Set to `dmnavalon` | Vercel + workflow env |
 | `MAX_JOB_INPUT_TOKENS` | Budget guard | Default `80000` | Workflow env |
@@ -30,6 +31,7 @@ gh secret set AI_GATEWAY_API_KEY -R dmnavalon/autonomus
 gh secret set GH_AUTOMATION_TOKEN -R dmnavalon/autonomus
 gh secret set VERCEL_TOKEN -R dmnavalon/autonomus
 gh secret set VERCEL_TEAM_ID -R dmnavalon/autonomus
+gh secret set VERCEL_AUTOMATION_BYPASS_SECRET -R dmnavalon/autonomus
 ```
 
 ## Setting Vercel envs (for telegram-webhook)

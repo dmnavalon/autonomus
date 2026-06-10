@@ -82,8 +82,8 @@ back via Telegram. Otherwise leave it empty.
   "modelos": {
     "programador": "anthropic/claude-opus-4-7",
     "reparador": "anthropic/claude-opus-4-7",
-    "revisor_codigo": "openai/gpt-5",
-    "analista_logs": "openai/gpt-5"
+    "revisor_codigo": "anthropic/claude-sonnet-4-6",
+    "analista_logs": "anthropic/claude-sonnet-4-6"
   }
 }
 ```

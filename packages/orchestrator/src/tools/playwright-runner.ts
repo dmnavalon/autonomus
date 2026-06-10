@@ -24,14 +24,16 @@ export interface RunResult {
   workdir: string;
 }
 
-export async function runPlaywrightInline(opts: RunOptions): Promise<RunResult> {
-  const workdir = join(tmpdir(), `pw-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
-  mkdirSync(join(workdir, 'e2e'), { recursive: true });
-
-  // Minimal playwright config — overrides base URL via env, retains traces on failure.
-  writeFileSync(
-    join(workdir, 'playwright.config.ts'),
-    `import { defineConfig } from '@playwright/test';
+/**
+ * Minimal playwright config — overrides base URL via env, retains traces on failure.
+ * Vercel previews sit behind Vercel Authentication on protected projects; the
+ * automation bypass header lets the tests through (docs: Protection Bypass for
+ * Automation). The header is only injected when the secret env var is present
+ * at test-run time.
+ */
+export function renderPlaywrightConfig(): string {
+  return `import { defineConfig } from '@playwright/test';
+const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -41,10 +43,24 @@ export default defineConfig({
     baseURL: process.env.PLAYWRIGHT_BASE_URL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    ...(bypass
+      ? {
+          extraHTTPHeaders: {
+            'x-vercel-protection-bypass': bypass,
+            'x-vercel-set-bypass-cookie': 'true',
+          },
+        }
+      : {}),
   },
 });
-`,
-  );
+`;
+}
+
+export async function runPlaywrightInline(opts: RunOptions): Promise<RunResult> {
+  const workdir = join(tmpdir(), `pw-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+  mkdirSync(join(workdir, 'e2e'), { recursive: true });
+
+  writeFileSync(join(workdir, 'playwright.config.ts'), renderPlaywrightConfig());
 
   for (const s of opts.specs) {
     writeFileSync(join(workdir, 'e2e', s.filename), s.content);

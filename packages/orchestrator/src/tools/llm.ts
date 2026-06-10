@@ -11,7 +11,7 @@
  * cache via providerOptions; OpenAI caches automatically when the prefix
  * matches a recent request. Cache hits show up as `cachedInputTokens > 0`.
  */
-import { generateObject, type LanguageModel } from 'ai';
+import { generateObject, APICallError, NoObjectGeneratedError, type LanguageModel } from 'ai';
 import type { z } from 'zod';
 import { AGENT_CAPS, BudgetExceededError, estimateCost } from '../budget.js';
 import type { AgentName, AgentUsage } from '../types.js';
@@ -42,42 +42,95 @@ export async function callAgentLLM<T>(input: LlmCallInput<T>): Promise<LlmCallOu
     throw new BudgetExceededError('agent_input');
   }
 
-  const result = await generateObject({
-    // The AI SDK accepts plain "provider/model" strings when AI_GATEWAY_API_KEY
-    // is set in the environment.
-    model: input.model as unknown as LanguageModel,
-    schema: input.schema,
-    system: input.systemPrefix,
-    prompt: input.userInput,
-    temperature: input.temperature ?? 0,
-    maxOutputTokens: cap.outputTokens,
-    providerOptions: {
-      anthropic: {
-        cacheControl: { type: 'ephemeral' },
-      },
-    },
-  });
+  // Failed attempts still consume provider tokens; accumulate their usage so
+  // telemetry never under-reports what the job actually spent.
+  let wastedInput = 0;
+  let wastedOutput = 0;
+  let wastedCached = 0;
+  let lastError: unknown;
 
-  // AI SDK v6 usage shape: { inputTokens, outputTokens, totalTokens, ... }.
-  // Cached input may surface in providerMetadata depending on provider.
-  const usage = result.usage;
-  const cachedInputTokens = readCachedInputTokens(result.providerMetadata) ?? 0;
+  for (let attempt = 0; attempt <= LLM_MAX_RETRIES; attempt++) {
+    try {
+      const result = await generateObject({
+        // The AI SDK accepts plain "provider/model" strings when AI_GATEWAY_API_KEY
+        // is set in the environment.
+        model: input.model as unknown as LanguageModel,
+        schema: input.schema,
+        system: input.systemPrefix,
+        prompt: input.userInput,
+        temperature: input.temperature ?? 0,
+        maxOutputTokens: cap.outputTokens,
+        providerOptions: {
+          anthropic: {
+            cacheControl: { type: 'ephemeral' },
+          },
+        },
+      });
 
-  const usd = estimateCost(input.model, {
-    inputTokens: usage.inputTokens ?? 0,
-    outputTokens: usage.outputTokens ?? 0,
-    cachedInputTokens,
-  });
+      // AI SDK v6 usage shape: { inputTokens, outputTokens, totalTokens, ... }.
+      // Cached input may surface in providerMetadata depending on provider.
+      const usage = result.usage;
+      const cachedInputTokens = (readCachedInputTokens(result.providerMetadata) ?? 0) + wastedCached;
+      const inputTokens = (usage.inputTokens ?? 0) + wastedInput;
+      const outputTokens = (usage.outputTokens ?? 0) + wastedOutput;
 
-  return {
-    output: result.object,
-    usage: {
-      inputTokens: usage.inputTokens ?? 0,
-      outputTokens: usage.outputTokens ?? 0,
-      cachedInputTokens,
-      costUsd: usd,
-    },
-  };
+      const usd = estimateCost(input.model, { inputTokens, outputTokens, cachedInputTokens });
+
+      return {
+        output: result.object,
+        usage: { inputTokens, outputTokens, cachedInputTokens, costUsd: usd },
+      };
+    } catch (err) {
+      lastError = err;
+      if (err instanceof BudgetExceededError || !isRetryableLlmError(err) || attempt === LLM_MAX_RETRIES) {
+        throw err;
+      }
+      const partial = readUsageFromError(err);
+      wastedInput += partial.inputTokens;
+      wastedOutput += partial.outputTokens;
+      wastedCached += partial.cachedInputTokens;
+      await sleep(LLM_RETRY_BACKOFF_MS * (attempt + 1));
+    }
+  }
+
+  // Unreachable (the loop either returns or throws), but keeps TS satisfied.
+  throw lastError instanceof Error ? lastError : new Error('LLM call failed');
+}
+
+const LLM_MAX_RETRIES = 2;
+const LLM_RETRY_BACKOFF_MS = 2_000;
+
+/**
+ * Retry on the failure modes that are transient in practice: the model
+ * returning no/invalid object (NoObjectGeneratedError), provider overload
+ * (429/5xx) and network hiccups. Schema/validation bugs in our own code also
+ * surface as NoObjectGeneratedError, but a bounded retry is cheap and the
+ * error still propagates after the last attempt.
+ */
+export function isRetryableLlmError(err: unknown): boolean {
+  if (NoObjectGeneratedError.isInstance(err)) return true;
+  if (APICallError.isInstance(err)) {
+    if (err.isRetryable) return true;
+    const status = err.statusCode ?? 0;
+    return status === 408 || status === 429 || status >= 500;
+  }
+  if (err instanceof TypeError && /fetch/i.test(err.message)) return true; // network failure
+  return false;
+}
+
+function readUsageFromError(err: unknown): { inputTokens: number; outputTokens: number; cachedInputTokens: number } {
+  if (NoObjectGeneratedError.isInstance(err) && err.usage) {
+    return {
+      inputTokens: err.usage.inputTokens ?? 0,
+      outputTokens: err.usage.outputTokens ?? 0,
+      cachedInputTokens: 0,
+    };
+  }
+  return { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function readCachedInputTokens(meta: unknown): number | undefined {

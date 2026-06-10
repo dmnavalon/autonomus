@@ -12,7 +12,8 @@
  */
 import 'dotenv/config';
 import { runJob } from './coordinator.js';
-import { commentOnIssue } from './tools/github.js';
+import { commentOnIssue, fetchIssue, transitionState, parseTelegramJobBody } from './tools/github.js';
+import { sendTelegramMessage } from './tools/telegram.js';
 
 async function main(): Promise<void> {
   const [, , command, ...args] = process.argv;
@@ -40,11 +41,26 @@ async function main(): Promise<void> {
     console.error(`[autonomus] error: ${detail}`);
     if (err instanceof Error && err.stack) console.error(err.stack);
 
+    // Best-effort, each step independent: a crash must leave the issue in a
+    // terminal state and the user informed, never silently stuck (issue #5).
     try {
       await commentOnIssue(
         issueNumber,
         `> ⚠️ Coordinator crashed: \`${detail.slice(0, 300)}\`. Marking as needs-human.`,
       );
+    } catch {
+      // best-effort
+    }
+    try {
+      const issue = await fetchIssue(issueNumber);
+      await transitionState(issueNumber, issue.labels, 'state:failed-needs-human');
+      const { chatId } = parseTelegramJobBody(issue.body);
+      if (chatId) {
+        await sendTelegramMessage(
+          chatId,
+          `⚠️ Tu solicitud #${issueNumber} falló por un error interno de la fábrica y necesita revisión humana.`,
+        );
+      }
     } catch {
       // best-effort
     }

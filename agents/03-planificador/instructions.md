@@ -76,7 +76,7 @@ Implementación: `packages/orchestrator/src/agents/planificador.ts` (LLM mid tie
 - No agrandar el proyecto: si el usuario dice "fix logout", no rediseñar auth.
 - No tomar decisiones de arquitectura (eso es del `05_technical_architect`).
 - No usar emojis ni markdown en el output, JSON only.
-- **Token budget**: input ≤ 4,000 / output ≤ 800 / model tier `mid`.
+- **Token budget**: input ≤ 4,000 / output ≤ 1,200 / model tier `mid`.
 
 ## Protocolo de comunicación
 
@@ -165,7 +165,7 @@ Turn the user's request into a small, programmable specification. Be ruthlessly 
 ## Reglas de eficiencia de tokens
 
 - Input cap: 4,000 tokens.
-- Output cap: 800 tokens.
+- Output cap: 1,200 tokens.
 - Model tier: `mid` (GPT-5).
 - Prompt prefix cacheable.
 - No incluir contenido del repo, solo `existing_routes` array de paths.

@@ -15,14 +15,14 @@ export const AGENT_CAPS: Record<AgentName, AgentCap> = {
   // Phase-3 LLM agents
   recepcionista: { inputTokens: 2_000, outputTokens: 300 },
   clasificador: { inputTokens: 1_500, outputTokens: 200 },
-  planificador: { inputTokens: 4_000, outputTokens: 800 },
+  planificador: { inputTokens: 4_000, outputTokens: 1_200 },
   arquitecto: { inputTokens: 6_000, outputTokens: 1_200 },
   router: { inputTokens: 1_500, outputTokens: 200 },
   programador: { inputTokens: 16_000, outputTokens: 4_000 },
   revisor_codigo: { inputTokens: 8_000, outputTokens: 600 },
   qa_planner: { inputTokens: 3_000, outputTokens: 600 },
   playwright: { inputTokens: 3_000, outputTokens: 1_500 },
-  analista_logs: { inputTokens: 6_000, outputTokens: 500 },
+  analista_logs: { inputTokens: 6_000, outputTokens: 800 },
   reparador: { inputTokens: 12_000, outputTokens: 3_000 },
   verificador: { inputTokens: 1_500, outputTokens: 200 },
   // Doc-maestro additions

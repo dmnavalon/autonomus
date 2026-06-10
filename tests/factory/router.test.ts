@@ -31,4 +31,13 @@ describe('router', () => {
     expect(chooseModel('reparador', { repairAttempt: 3 }).reasoningEnabled).toBe(true);
     expect(chooseModel('reparador', { repairAttempt: 5 }).reasoningEnabled).toBe(true);
   });
+
+  it('mid tier is not a reasoning model (gpt-5 starves JSON output under tight caps)', () => {
+    // Regression for issue #5: gpt-5 burns maxOutputTokens on reasoning and
+    // generateObject gets nothing back. Mid tier must stay on a plain model.
+    const c = chooseModel('planificador');
+    expect(c.tier).toBe('mid');
+    expect(c.model).not.toMatch(/^openai\/gpt-5$/);
+    expect(c.model).toMatch(/sonnet/);
+  });
 });

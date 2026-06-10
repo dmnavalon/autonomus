@@ -6,7 +6,10 @@ import type { AgentName, ModelTier, Complejidad, Riesgo } from './types.js';
 
 const MODEL_BY_TIER: Record<ModelTier, string> = {
   cheap: process.env.MODEL_CHEAP  ?? 'anthropic/claude-haiku-4-5',
-  mid:   process.env.MODEL_MID    ?? 'openai/gpt-5',
+  // mid must NOT be a reasoning model: reasoning tokens count against
+  // maxOutputTokens, and with caps like planificador's they starve the JSON
+  // output entirely → NoObjectGeneratedError (see issue #5).
+  mid:   process.env.MODEL_MID    ?? 'anthropic/claude-sonnet-4-6',
   strong: process.env.MODEL_STRONG ?? 'anthropic/claude-opus-4-7',
 };
 
