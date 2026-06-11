@@ -124,9 +124,9 @@ Implementación determinista en `packages/orchestrator/src/router.ts` (`chooseMo
 | verificador | cheap | — |
 | router (self) | cheap | — |
 | planificador | cheap | — |
-| arquitecto | mid | strong if `complejidad=alta` OR `riesgo=alto` |
+| arquitecto | cheap | strong if `complejidad=alta` OR `riesgo=alto` |
 | revisor_codigo | mid | strong if PR diff > 1000 LOC |
-| analista_logs | mid | strong if `bloqueante=true` AND last attempt was strong |
+| analista_logs | cheap | strong if `bloqueante=true` AND last attempt was strong |
 | programador | strong | — (always strong) |
 | reparador | strong | enable `reasoning_enabled=true` if attempt ≥ 3 |
 | protocol_binder | cheap | mid si valida cambios masivos en >5 agentes simultáneos |

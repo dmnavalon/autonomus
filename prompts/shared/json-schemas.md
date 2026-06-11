@@ -83,7 +83,7 @@ back via Telegram. Otherwise leave it empty.
     "programador": "openai/gpt-5",
     "reparador": "openai/gpt-5",
     "revisor_codigo": "openai/gpt-5",
-    "analista_logs": "openai/gpt-5"
+    "analista_logs": "anthropic/claude-haiku-4-5"
   }
 }
 ```

@@ -23,16 +23,18 @@ const DEFAULT_TIER: Record<AgentName, ModelTier> = {
   qa_planner:       'cheap',
   verificador:      'cheap',
   router:           'cheap',
-  // cheap (haiku) on purpose: gpt-5 at minimal reasoning is erratic here —
-  // it intermittently returns empty specs or decorative questions. The spec
-  // role needs instruction-following, not depth (probado en issues #10–#13).
+  // cheap (haiku) on purpose for planificador/arquitecto/analista/playwright:
+  // (a) gpt-5 at minimal reasoning is erratic on spec roles (empty specs,
+  // decorative questions — issues #10–#13), and (b) the gateway free tier
+  // rate-limits gpt-5 aggressively (issue #15), so we reserve it for the two
+  // agents that genuinely need it: programador y reparador.
   planificador:     'cheap',
-  arquitecto:       'mid',
+  arquitecto:       'cheap',
   revisor_codigo:   'mid',
-  analista_logs:    'mid',
+  analista_logs:    'cheap',
   programador:      'strong',
   reparador:        'strong',
-  playwright:       'mid',
+  playwright:       'cheap',
   // Doc-maestro additions. Deterministic agents map to 'cheap' as a placeholder
   // (chooseModel is never called for them; their agent functions skip the LLM).
   coordinador:           'cheap', // pure orchestration, no LLM

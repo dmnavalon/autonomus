@@ -58,7 +58,7 @@ Definir cómo implementar la especificación en el repo actual con mínimo cambi
 Arquitecto convierte la spec del Planificador en un plan técnico concreto: qué archivos
 tocar, qué dependencias agregar, qué migraciones, qué env vars, en qué orden.
 
-Implementación: `packages/orchestrator/src/agents/arquitecto.ts` (LLM mid; upgrade a strong
+Implementación: `packages/orchestrator/src/agents/arquitecto.ts` (LLM cheap; upgrade a strong
 si `complejidad=alta` o `riesgo=alto`).
 
 ## Responsabilidades
@@ -79,7 +79,7 @@ si `complejidad=alta` o `riesgo=alto`).
 - No incluir valores de env vars, solo nombres.
 - No tocar `packages/orchestrator/`, `packages/telegram-webhook/`, `agents/`, `protocols/`,
   `flows/`, `prompts/`, `registry/` salvo que la solicitud específicamente sea sobre la fábrica.
-- **Token budget**: input ≤ 6,000 / output ≤ 2,000 / model tier `mid` (strong si complejidad=alta).
+- **Token budget**: input ≤ 6,000 / output ≤ 2,000 / model tier `cheap` (strong si complejidad=alta).
 
 ## Protocolo de comunicación
 
@@ -174,7 +174,7 @@ Output JSON only.
 
 - Input cap: 6,000 tokens.
 - Output cap: 2,000 tokens.
-- Model tier: `mid` (GPT-5); `strong` (Opus) si `complejidad=alta` o `riesgo=alto` (regla en `router.ts`).
+- Model tier: `cheap` (Haiku); `strong` si `complejidad=alta` o `riesgo=alto` (regla en `router.ts`).
 - Prompt prefix cacheable.
 - `files_index` se pasa como lista de paths (no contenido); el Programador lee archivos individuales según el plan.
 

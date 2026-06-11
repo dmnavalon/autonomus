@@ -19,8 +19,8 @@ Definidos en `packages/orchestrator/src/budget.ts` (`AGENT_CAPS`). Mirror de los
 
 | Tier | Modelo | Uso típico |
 |---|---|---|
-| `cheap` | `anthropic/claude-haiku-4-5` | Recepcionista, Clasificador, QA Planner, Verificador, Router , Planificador |
-| `mid` | `openai/gpt-5` | Arquitecto, Revisor, Analista, Playwright gen, Factory Evaluator |
+| `cheap` | `anthropic/claude-haiku-4-5` | Recepcionista, Clasificador, QA Planner, Verificador, Router, Planificador, Arquitecto, Analista, Playwright gen |
+| `mid` | `openai/gpt-5` | Revisor, Factory Evaluator |
 | `strong` | `openai/gpt-5` | Programador, Reparador (reasoning si attempt ≥ 3) |
 
 ## Estrategias de compresión

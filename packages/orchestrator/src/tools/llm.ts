@@ -54,7 +54,9 @@ export async function callAgentLLM<T>(input: LlmCallInput<T>): Promise<LlmCallOu
   // 'minimal' to leave the budget for the actual JSON output.
   const isOpenAiReasoning = input.model.startsWith('openai/gpt-5');
 
-  for (let attempt = 0; attempt <= LLM_MAX_RETRIES; attempt++) {
+  let transientRetries = 0;
+  let rateLimitRetries = 0;
+  for (;;) {
     try {
       const result = await generateObject({
         // The AI SDK accepts plain "provider/model" strings when AI_GATEWAY_API_KEY
@@ -88,14 +90,23 @@ export async function callAgentLLM<T>(input: LlmCallInput<T>): Promise<LlmCallOu
       };
     } catch (err) {
       lastError = err;
-      if (err instanceof BudgetExceededError || !isRetryableLlmError(err) || attempt === LLM_MAX_RETRIES) {
+      if (err instanceof BudgetExceededError) throw err;
+      // Free-tier rate limits reset on a window of minutes, not seconds:
+      // wait patiently instead of burning the short-backoff retries.
+      if (isRateLimitError(err) && rateLimitRetries < RATE_LIMIT_MAX_RETRIES) {
+        rateLimitRetries += 1;
+        await sleep(RATE_LIMIT_BACKOFF_MS);
+        continue;
+      }
+      if (!isRetryableLlmError(err) || transientRetries >= LLM_MAX_RETRIES) {
         throw err;
       }
+      transientRetries += 1;
       const partial = readUsageFromError(err);
       wastedInput += partial.inputTokens;
       wastedOutput += partial.outputTokens;
       wastedCached += partial.cachedInputTokens;
-      await sleep(LLM_RETRY_BACKOFF_MS * (attempt + 1));
+      await sleep(LLM_RETRY_BACKOFF_MS * transientRetries);
     }
   }
 
@@ -105,6 +116,14 @@ export async function callAgentLLM<T>(input: LlmCallInput<T>): Promise<LlmCallOu
 
 const LLM_MAX_RETRIES = 2;
 const LLM_RETRY_BACKOFF_MS = 2_000;
+const RATE_LIMIT_MAX_RETRIES = 4;
+const RATE_LIMIT_BACKOFF_MS = Number(process.env.LLM_RATE_LIMIT_BACKOFF_MS ?? 75_000);
+
+/** Gateway free-tier throttling: 429 status or an explicit rate-limit message. */
+export function isRateLimitError(err: unknown): boolean {
+  if (APICallError.isInstance(err) && err.statusCode === 429) return true;
+  return err instanceof Error && /rate.?limit/i.test(err.message);
+}
 
 /**
  * Retry on the failure modes that are transient in practice: the model
