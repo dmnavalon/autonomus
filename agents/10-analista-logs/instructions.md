@@ -67,7 +67,9 @@ Implementación: `packages/orchestrator/src/agents/analista_logs.ts` (LLM mid; s
 1. Parsear `log_extract` (últimas 200 líneas + grep `error|fail|exception`).
 2. Clasificar `tipo_error`:
    - `producto` → `reparar`
-   - `fabrica` (orchestrator bug, JSON malformado entre agentes) → `escalar_humano`
+   - `fabrica` (orchestrator bug, JSON malformado entre agentes, runner de tests
+     roto — p. ej. `Cannot find module '@playwright/test'`, `playwright_did_not_emit_results`
+     con 0 tests corridos) → `escalar_humano`
    - `infraestructura` (CI OOM, Vercel timeout, network flake) → `reintentar` 1×
    - `credenciales` (401/403, missing env var) → `escalar_humano`
    - `desconocido` → `escalar_humano`

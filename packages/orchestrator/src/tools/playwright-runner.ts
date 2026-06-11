@@ -7,7 +7,6 @@
  */
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import type { PlaywrightExecutionOutput } from '../schemas/index.js';
 
@@ -57,7 +56,15 @@ export default defineConfig({
 }
 
 export async function runPlaywrightInline(opts: RunOptions): Promise<RunResult> {
-  const workdir = join(tmpdir(), `pw-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+  // The workdir must live INSIDE the orchestrator checkout: Node resolves
+  // `@playwright/test` (imported by the generated config) by walking up to the
+  // repo's node_modules. An os.tmpdir() workdir has no resolution path and
+  // every run dies with "Cannot find module '@playwright/test'" (issue #17).
+  const workdir = join(
+    process.cwd(),
+    '.factory-pw',
+    `pw-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  );
   mkdirSync(join(workdir, 'e2e'), { recursive: true });
 
   writeFileSync(join(workdir, 'playwright.config.ts'), renderPlaywrightConfig());
