@@ -166,7 +166,7 @@ autonomus/
 │   ├── telegram-webhook/ # Next.js App Router → deployed to Vercel
 │   └── shared/         # Cross-workspace types (currently minimal)
 ├── registry/           # users.json, apps.json — operational data
-├── tests/factory/      # Vitest suite (101+ tests)
+├── tests/factory/      # Vitest suite (147 tests)
 ├── docs/               # architecture, runbook, env-vars, onboarding, agents_overview
 ├── scripts/            # setup-{secrets,labels,vercel-env,telegram-webhook}.sh
 ├── .github/workflows/  # 8 workflows
@@ -203,8 +203,16 @@ autonomus/
 | 7. Analyst + Repairer loop (≤5) | ✅ |
 | 8. Final Verifier + Telegram notify (canonical) | ✅ |
 | 9. Tests + docs + e2e | ✅ |
+| 10. E2E real validado contra Fechit (PR + preview + QA + notify) | ✅ 2026-06-10 |
 
-101+/101 tests green. Webhook live at https://autonomus-telegram-webhook.vercel.app.
+147/147 tests green. Webhook live at https://autonomus-telegram-webhook.vercel.app.
+
+**Modelos (free tier del AI Gateway)**: `cheap = claude-haiku-4-5` para todos los agentes
+estructurados (recepcionista, clasificador, planificador, arquitecto, qa, analista);
+`strong = openai/gpt-5` (reasoning minimal) SOLO para programador/reparador. El free tier
+bloquea sonnet/opus (403) y rate-limita el resto; los 429 se reintentan con backoff de 75s.
+Primer E2E completo: issue #18 → [fechit#39](https://github.com/dmnavalon/fechit/pull/39)
+($0.11, QA 4/4 passed).
 
 ---
 
