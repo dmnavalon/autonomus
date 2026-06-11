@@ -57,7 +57,7 @@ Transformar la solicitud en especificación ejecutable, corta, sin inventar ni a
 alcance. El Planificador es la fuente única de verdad de lo que se va a construir; los
 `criterios_aceptacion` son el contrato que QA Planner usará para generar tests.
 
-Implementación: `packages/orchestrator/src/agents/planificador.ts` (LLM mid tier).
+Implementación: `packages/orchestrator/src/agents/planificador.ts` (LLM cheap tier).
 
 ## Responsabilidades
 
@@ -76,7 +76,7 @@ Implementación: `packages/orchestrator/src/agents/planificador.ts` (LLM mid tie
 - No agrandar el proyecto: si el usuario dice "fix logout", no rediseñar auth.
 - No tomar decisiones de arquitectura (eso es del `05_technical_architect`).
 - No usar emojis ni markdown en el output, JSON only.
-- **Token budget**: input ≤ 4,000 / output ≤ 2,000 / model tier `mid`.
+- **Token budget**: input ≤ 4,000 / output ≤ 2,000 / model tier `cheap`.
 
 ## Protocolo de comunicación
 
@@ -175,7 +175,7 @@ Turn the user's request into a small, programmable specification. Be ruthlessly 
 
 - Input cap: 4,000 tokens.
 - Output cap: 2,000 tokens.
-- Model tier: `mid` (GPT-5).
+- Model tier: `cheap` (Haiku).
 - Prompt prefix cacheable.
 - No incluir contenido del repo, solo `existing_routes` array de paths.
 

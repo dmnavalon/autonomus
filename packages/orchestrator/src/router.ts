@@ -23,7 +23,10 @@ const DEFAULT_TIER: Record<AgentName, ModelTier> = {
   qa_planner:       'cheap',
   verificador:      'cheap',
   router:           'cheap',
-  planificador:     'mid',
+  // cheap (haiku) on purpose: gpt-5 at minimal reasoning is erratic here —
+  // it intermittently returns empty specs or decorative questions. The spec
+  // role needs instruction-following, not depth (probado en issues #10–#13).
+  planificador:     'cheap',
   arquitecto:       'mid',
   revisor_codigo:   'mid',
   analista_logs:    'mid',

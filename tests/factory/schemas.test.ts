@@ -69,6 +69,26 @@ describe('Zod schemas (inter-agent JSON)', () => {
     ).toThrow();
   });
 
+  it('Planificador rejects lazy specs (no criterios, no preguntas)', () => {
+    const base = {
+      objetivo: 'x',
+      alcance: [],
+      fuera_de_alcance: [],
+      pantallas_afectadas: [],
+      flujos_esperados: [],
+      riesgos: [],
+    };
+    expect(() =>
+      PlanificadorOutputSchema.parse({ ...base, criterios_aceptacion: [], preguntas_pendientes: [] }),
+    ).toThrow();
+    expect(() =>
+      PlanificadorOutputSchema.parse({ ...base, criterios_aceptacion: [], preguntas_pendientes: ['q'] }),
+    ).not.toThrow();
+    expect(() =>
+      PlanificadorOutputSchema.parse({ ...base, criterios_aceptacion: ['Given/When/Then'], preguntas_pendientes: [] }),
+    ).not.toThrow();
+  });
+
   it('Arquitecto accepts a minimal output', () => {
     const a = ArquitectoOutputSchema.parse({
       archivos_probables: ['app/page.tsx'],

@@ -36,16 +36,23 @@ export const ClasificadorOutputSchema = z.object({
 });
 export type ClasificadorOutput = z.infer<typeof ClasificadorOutputSchema>;
 
-export const PlanificadorOutputSchema = z.object({
-  objetivo: z.string().min(1).max(200),
-  alcance: z.array(z.string().max(120)).max(5),
-  fuera_de_alcance: z.array(z.string().max(120)).max(3),
-  pantallas_afectadas: z.array(z.string().max(120)).max(8),
-  flujos_esperados: z.array(z.string().max(200)).max(5),
-  criterios_aceptacion: z.array(z.string().max(300)).max(4),
-  riesgos: z.array(z.string().max(150)).max(3),
-  preguntas_pendientes: z.array(z.string().max(200)).max(2),
-});
+export const PlanificadorOutputSchema = z
+  .object({
+    objetivo: z.string().min(1).max(200),
+    alcance: z.array(z.string().max(120)).max(5),
+    fuera_de_alcance: z.array(z.string().max(120)).max(3),
+    pantallas_afectadas: z.array(z.string().max(120)).max(8),
+    flujos_esperados: z.array(z.string().max(200)).max(5),
+    criterios_aceptacion: z.array(z.string().max(300)).max(4),
+    riesgos: z.array(z.string().max(150)).max(3),
+    preguntas_pendientes: z.array(z.string().max(200)).max(2),
+  })
+  // A spec with no blocking questions must be actionable: lazy empty specs
+  // fail validation and the llm retry loop re-asks the model.
+  .refine((o) => o.preguntas_pendientes.length > 0 || o.criterios_aceptacion.length > 0, {
+    message: 'criterios_aceptacion no puede estar vacio cuando no hay preguntas_pendientes',
+    path: ['criterios_aceptacion'],
+  });
 export type PlanificadorOutput = z.infer<typeof PlanificadorOutputSchema>;
 
 export const ArquitectoOutputSchema = z.object({

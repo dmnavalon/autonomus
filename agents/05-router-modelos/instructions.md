@@ -123,7 +123,7 @@ Implementación determinista en `packages/orchestrator/src/router.ts` (`chooseMo
 | qa_planner | cheap | — |
 | verificador | cheap | — |
 | router (self) | cheap | — |
-| planificador | mid | — |
+| planificador | cheap | — |
 | arquitecto | mid | strong if `complejidad=alta` OR `riesgo=alto` |
 | revisor_codigo | mid | strong if PR diff > 1000 LOC |
 | analista_logs | mid | strong if `bloqueante=true` AND last attempt was strong |
