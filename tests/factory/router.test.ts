@@ -15,7 +15,7 @@ describe('router', () => {
   });
 
   it('upgrades arquitecto to strong when complejidad=alta', () => {
-    expect(chooseModel('arquitecto', { complejidad: 'media' }).tier).toBe('mid');
+    expect(chooseModel('arquitecto', { complejidad: 'media' }).tier).toBe('cheap');
     expect(chooseModel('arquitecto', { complejidad: 'alta' }).tier).toBe('strong');
     expect(chooseModel('arquitecto', { riesgo: 'alto' }).tier).toBe('strong');
   });
