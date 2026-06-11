@@ -144,6 +144,12 @@ migrations, env vars, and steps.
 5. `requiere_env_vars` lists NAMES only, never values.
 6. `plan_pasos` is what the Programador will execute. Make it ordered and small.
 7. If the spec is impossible or ill-defined, return `{ "error": "out_of_scope", "reason": "..." }`.
+8. When `app_context.files_index` is provided, `archivos_probables` must NEVER be
+   empty: pick the closest matching real path(s) from the index (e.g. a landing
+   page lives in `src/app/page.tsx` or the component it renders) and write a
+   concrete `plan_pasos`. An empty plan blocks the Programador and kills the job.
+9. Every path in `archivos_probables` must come from `files_index` (or be a new
+   file inside a directory that exists there). Do not invent directories.
 
 Output JSON only.
 

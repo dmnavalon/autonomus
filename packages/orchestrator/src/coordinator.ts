@@ -82,6 +82,7 @@ import {
   createBranchFromBase,
   commitTreeToBranch,
   openPullRequest,
+  listRepoFilePaths,
   type FileEdit,
 } from './tools/github-target.js';
 import { detectSecrets } from './agents/github_operator.js';
@@ -266,9 +267,13 @@ async function runIntakeAndPlanning(issue: IssueSnapshot, ledger: JobLedger): Pr
   }
 
   // ---------- step 4: Arquitecto ---------------------------------------
+  // The Architect names the files the Programmer will edit, so it needs the
+  // target repo's file index — without it, it returns an empty plan and the
+  // Programmer (correctly) refuses to invent paths.
+  const arqAppContext = meta.appSlug ? await buildArchitectAppContext(meta.appSlug) : null;
   const arqResult = await runArquitecto({
     spec: planResult.output,
-    app_context: null,
+    app_context: arqAppContext,
     complejidad: claResult.output.complejidad,
     riesgo: claResult.output.riesgo,
   });
@@ -421,6 +426,29 @@ async function terminal(
 
 async function refreshLabels(issueNumber: number): Promise<string[]> {
   return (await fetchIssue(issueNumber)).labels;
+}
+
+/** Extensions that never help the Architect pick edit targets. */
+const NON_CODE_RE = /\.(png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|eot|mp4|pdf|lock|map)$|(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/i;
+
+/**
+ * Builds the Architect's app_context: slug, stack and a code-file index of the
+ * target repo (git tree, filtered). Best-effort — a context-less Architect run
+ * produces an empty plan, but a failed tree fetch shouldn't kill the job here;
+ * the Programmer phase will surface registry/repo problems with better errors.
+ */
+async function buildArchitectAppContext(
+  appSlug: string,
+): Promise<{ slug?: string; stack?: string; files_index?: string[] } | null> {
+  try {
+    const app = await findAppBySlug(appSlug);
+    if (!app) return null;
+    const paths = await listRepoFilePaths(parseRepo(app.repo), app.default_branch, 1_000);
+    const files_index = paths.filter((p) => !NON_CODE_RE.test(p)).slice(0, 300);
+    return { slug: app.slug, stack: app.stack, files_index };
+  } catch {
+    return null;
+  }
 }
 
 async function ensureTypeLabel(issueNumber: number, tipo: string): Promise<void> {
