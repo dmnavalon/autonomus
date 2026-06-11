@@ -534,7 +534,7 @@ async function runProgrammerAndOpenPR(args: {
     return { kind: 'error', reason: `branch \`${branchName}\` ya existe en ${app.repo}` };
   }
 
-  const { files_extracts, not_found } = await loadFilesExtracts(
+  const { files_extracts, not_found, truncated, original_sizes } = await loadFilesExtracts(
     target,
     baseBranch,
     plan.archivos_probables,
@@ -581,6 +581,24 @@ async function runProgrammerAndOpenPR(args: {
   );
   if (forbidden.length > 0) {
     return { kind: 'error', reason: `forbidden paths: ${forbidden.map((d) => d.path).join(', ')}` };
+  }
+
+  // 2b) destructive-rewrite guard: the Programmer emits whole files, so an
+  //     `update` on a truncated extract (it never saw the tail) or one that
+  //     shrinks a file by >60% destroys code (issue #14: landing-page.tsx
+  //     401 → 36 lines). Deterministic rejection, no LLM judgement.
+  const truncatedSet = new Set(truncated);
+  const destructive = edits.filter((e) => {
+    if (e.operation !== 'update') return false;
+    if (truncatedSet.has(e.path)) return true;
+    const orig = original_sizes[e.path];
+    return orig != null && e.content.length < orig * 0.4;
+  });
+  if (destructive.length > 0) {
+    return {
+      kind: 'error',
+      reason: `rewrite destructivo (extract truncado o encogimiento >60%): ${destructive.map((d) => d.path).join(', ')}`,
+    };
   }
 
   // 3) secret detection on file contents and commit message
@@ -769,7 +787,7 @@ async function runQAPipeline(args: QAPipelineArgs): Promise<{ finalState: string
     await addLabelSafe(issueNumber, `repair:${attempt}`);
 
     // Load files the analyst flagged from the CURRENT branch (carries prior fixes).
-    const { files_extracts, not_found } = await loadFilesExtracts(
+    const { files_extracts, not_found, truncated, original_sizes } = await loadFilesExtracts(
       target,
       currentBranch,
       analista.output.archivos_probables,
@@ -825,6 +843,29 @@ async function runQAPipeline(args: QAPipelineArgs): Promise<{ finalState: string
         prUrl: args.prUrl,
         previewUrl: preview,
         razon: 'reparador scope drift',
+      });
+      return { finalState: 'state:failed-needs-human' };
+    }
+
+    // Same destructive-rewrite guard as the Programmer phase: whole-file
+    // updates on truncated extracts (or >60% shrinks) lose code.
+    const truncatedSet = new Set(truncated);
+    const destructive = reparador.output.archivos_modificados.filter((e) => {
+      if (e.operation !== 'update') return false;
+      if (truncatedSet.has(e.path)) return true;
+      const orig = original_sizes[e.path];
+      return orig != null && e.content.length < orig * 0.4;
+    });
+    if (destructive.length > 0) {
+      await commentOnIssue(
+        issueNumber,
+        `> Coordinator: reparador intentó un rewrite destructivo (${destructive.map((d) => d.path).join(', ')}). Escalando.`,
+      );
+      await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
+      await notifyTerminal(issueNumber, false, {
+        prUrl: args.prUrl,
+        previewUrl: preview,
+        razon: 'reparador rewrite destructivo',
       });
       return { finalState: 'state:failed-needs-human' };
     }
