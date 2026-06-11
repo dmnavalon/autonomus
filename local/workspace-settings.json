@@ -1,0 +1,48 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(pkill:*)",
+      "Bash(osascript:*)",
+      "Bash(sleep:*)",
+      "Bash(mkdir:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(jq:*)",
+      "Bash(echo:*)",
+      "Bash(cd:*)",
+      "Bash(pwd:*)",
+      "Bash(nohup:*)",
+      "Bash(xargs:*)",
+      "Bash(true:*)",
+      "Bash(date:*)"
+    ],
+    "deny": [
+      "Bash(git push origin main:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh repo delete:*)",
+      "Bash(gh secret:*)",
+      "Bash(gh workflow:*)",
+      "Bash(rm -rf:*)",
+      "Bash(vercel:*)",
+      "Read(./.env*)",
+      "Read(../**/.env*)"
+    ]
+  }
+}

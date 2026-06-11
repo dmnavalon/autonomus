@@ -1,0 +1,8 @@
+{
+  "name": "autonomus-local-qa",
+  "private": true,
+  "description": "Harness Playwright de la fábrica local — specs por job en e2e/",
+  "devDependencies": {
+    "@playwright/test": "^1.59.0"
+  }
+}
