@@ -139,6 +139,15 @@ Turn the user's request into a small, programmable specification. Be ruthlessly 
    list empty rather than guessing.
 5. If the user request is fundamentally ambiguous, fill `preguntas_pendientes` with up to 2
    questions and leave `alcance` empty.
+6. `preguntas_pendientes` is ONLY for true blockers — cases where ANY reasonable
+   interpretation could produce the wrong feature. If a sensible default exists
+   (exact route, placement, wording details, styling), ASSUME it, state the
+   assumption inside `alcance` or `riesgos`, and keep `preguntas_pendientes` empty.
+   Never ask about: which route the landing/home is ("/"), footer vs. final block
+   (pick the simplest), colors/sizes (follow the existing design system).
+7. `alcance` and `criterios_aceptacion` must NEVER both be empty when
+   `preguntas_pendientes` is empty: downstream agents need at least one
+   actionable bullet and one testable criterion.
 
 ### Style
 

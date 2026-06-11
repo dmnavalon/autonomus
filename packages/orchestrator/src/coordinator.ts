@@ -172,6 +172,17 @@ async function runIntakeAndPlanning(issue: IssueSnapshot, ledger: JobLedger): Pr
         ...recepResult.output.preguntas.map((q) => `- ${q}`),
       ].join('\n'),
     );
+    if (meta.chatId) {
+      await sendTelegramMessage(
+        meta.chatId,
+        [
+          `❓ Tu solicitud #${issueNumber} necesita más detalle:`,
+          ...recepResult.output.preguntas.map((q) => `• ${q}`),
+          '',
+          'Respondé con un mensaje nuevo incluyendo esos datos.',
+        ].join('\n'),
+      ).catch(() => {});
+    }
     await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:human-review-required');
     await postLedger(issueNumber, ledger);
     return { finalState: 'state:human-review-required', ledger };
@@ -228,6 +239,27 @@ async function runIntakeAndPlanning(issue: IssueSnapshot, ledger: JobLedger): Pr
   await postAgentComment(issueNumber, 'planificador', planResult.model, planResult.output, planResult.usage);
 
   if (planResult.output.preguntas_pendientes.length > 0) {
+    const preguntas = planResult.output.preguntas_pendientes;
+    await commentOnIssue(
+      issueNumber,
+      [
+        '> Coordinator: Planificador needs answers before coding can start.',
+        '',
+        'Preguntas:',
+        ...preguntas.map((q) => `- ${q}`),
+      ].join('\n'),
+    );
+    if (meta.chatId) {
+      await sendTelegramMessage(
+        meta.chatId,
+        [
+          `❓ Tu solicitud #${issueNumber} necesita más detalle antes de programar:`,
+          ...preguntas.map((q) => `• ${q}`),
+          '',
+          'Respondé con un mensaje nuevo incluyendo esos datos.',
+        ].join('\n'),
+      ).catch(() => {});
+    }
     await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:human-review-required');
     await postLedger(issueNumber, ledger);
     return { finalState: 'state:human-review-required', ledger };
