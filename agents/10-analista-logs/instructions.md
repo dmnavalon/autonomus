@@ -81,7 +81,7 @@ Implementación: `packages/orchestrator/src/agents/analista_logs.ts` (LLM mid; s
 - No solicita el log completo; trabaja con el extracto.
 - Si extracto insuficiente → error `input_truncated_insufficient`.
 - No edita código (eso es del Reparador).
-- **Token budget**: input ≤ 6,000 / output ≤ 800 / model tier `mid` (strong si bloqueante y previo fue strong).
+- **Token budget**: input ≤ 6,000 / output ≤ 1,500 / model tier `mid` (strong si bloqueante y previo fue strong).
 
 ## Protocolo de comunicación
 
@@ -164,7 +164,7 @@ Reglas operativas del LLM (preservadas de Phase 0):
 ## Reglas de eficiencia de tokens
 
 - Input cap: 6,000 tokens.
-- Output cap: 800 tokens.
+- Output cap: 1,500 tokens.
 - Model tier: `mid`; strong si bloqueante y previo fue strong.
 - Prompt prefix cacheable.
 - Solo ≤ 200 líneas de log + último resultado de Playwright.

@@ -49,6 +49,11 @@ export async function callAgentLLM<T>(input: LlmCallInput<T>): Promise<LlmCallOu
   let wastedCached = 0;
   let lastError: unknown;
 
+  // gpt-5 is a reasoning model: it rejects non-default temperature and its
+  // reasoning tokens count against maxOutputTokens, so we pin reasoning to
+  // 'minimal' to leave the budget for the actual JSON output.
+  const isOpenAiReasoning = input.model.startsWith('openai/gpt-5');
+
   for (let attempt = 0; attempt <= LLM_MAX_RETRIES; attempt++) {
     try {
       const result = await generateObject({
@@ -58,12 +63,13 @@ export async function callAgentLLM<T>(input: LlmCallInput<T>): Promise<LlmCallOu
         schema: input.schema,
         system: input.systemPrefix,
         prompt: input.userInput,
-        temperature: input.temperature ?? 0,
+        temperature: isOpenAiReasoning ? undefined : (input.temperature ?? 0),
         maxOutputTokens: cap.outputTokens,
         providerOptions: {
           anthropic: {
             cacheControl: { type: 'ephemeral' },
           },
+          ...(isOpenAiReasoning ? { openai: { reasoningEffort: 'minimal' } } : {}),
         },
       });
 

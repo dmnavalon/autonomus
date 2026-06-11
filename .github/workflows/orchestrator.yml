@@ -52,6 +52,6 @@ jobs:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           FACTORY_REPO: dmnavalon/autonomus
           MAX_JOB_INPUT_TOKENS: '80000'
-          MAX_JOB_OUTPUT_TOKENS: '15000'
+          MAX_JOB_OUTPUT_TOKENS: '30000'
           MAX_JOB_COST_USD: '2.00'
         run: node packages/orchestrator/dist/index.js run-job ${{ github.event.issue.number }}

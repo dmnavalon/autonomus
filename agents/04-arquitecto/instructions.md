@@ -79,7 +79,7 @@ si `complejidad=alta` o `riesgo=alto`).
 - No incluir valores de env vars, solo nombres.
 - No tocar `packages/orchestrator/`, `packages/telegram-webhook/`, `agents/`, `protocols/`,
   `flows/`, `prompts/`, `registry/` salvo que la solicitud específicamente sea sobre la fábrica.
-- **Token budget**: input ≤ 6,000 / output ≤ 1,200 / model tier `mid` (strong si complejidad=alta).
+- **Token budget**: input ≤ 6,000 / output ≤ 2,000 / model tier `mid` (strong si complejidad=alta).
 
 ## Protocolo de comunicación
 
@@ -167,7 +167,7 @@ Output JSON only.
 ## Reglas de eficiencia de tokens
 
 - Input cap: 6,000 tokens.
-- Output cap: 1,200 tokens.
+- Output cap: 2,000 tokens.
 - Model tier: `mid` (GPT-5); `strong` (Opus) si `complejidad=alta` o `riesgo=alto` (regla en `router.ts`).
 - Prompt prefix cacheable.
 - `files_index` se pasa como lista de paths (no contenido); el Programador lee archivos individuales según el plan.

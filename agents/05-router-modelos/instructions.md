@@ -95,7 +95,7 @@ Implementación determinista en `packages/orchestrator/src/router.ts` (`chooseMo
 ```json
 {
   "selected_model_tier": "cheap | mid | strong",
-  "model": "anthropic/claude-haiku-4-5 | anthropic/claude-sonnet-4-6 | anthropic/claude-opus-4-7",
+  "model": "anthropic/claude-haiku-4-5 | openai/gpt-5 | openai/gpt-5",
   "reasoning_enabled": false,
   "context_package": { "spec": "...", "diff": "...", "files_extracts": {} },
   "compression_strategy": "diffs | summary | full | none",
@@ -140,8 +140,8 @@ Implementación determinista en `packages/orchestrator/src/router.ts` (`chooseMo
 ### Tier → model mapping
 
 - `cheap`  → `anthropic/claude-haiku-4-5` (env: `MODEL_CHEAP`)
-- `mid`    → `anthropic/claude-sonnet-4-6` (env: `MODEL_MID`)
-- `strong` → `anthropic/claude-opus-4-7` (env: `MODEL_STRONG`)
+- `mid`    → `openai/gpt-5` (env: `MODEL_MID`)
+- `strong` → `openai/gpt-5` (env: `MODEL_STRONG`)
 
 ### Compression strategy
 

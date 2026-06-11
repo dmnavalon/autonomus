@@ -79,7 +79,7 @@ Implementación:
 - No modifica código del producto (solo `e2e/factory/*`).
 - No marca passed sin reporte parseado.
 - No corre tests localmente (solo CI).
-- **Token budget**: generación input ≤ 3,000 / output ≤ 1,500 / tier `mid`. Ejecución 0 tokens.
+- **Token budget**: generación input ≤ 3,000 / output ≤ 2,500 / tier `mid`. Ejecución 0 tokens.
 
 ## Protocolo de comunicación
 
@@ -164,7 +164,7 @@ Reglas operativas del LLM (preservadas de Phase 0):
 
 ## Reglas de eficiencia de tokens
 
-- Generación: input ≤ 3,000 / output ≤ 1,500 / tier `mid`.
+- Generación: input ≤ 3,000 / output ≤ 2,500 / tier `mid`.
 - Ejecución: 0 tokens (CI workflow puro).
 - Tests reusados desde branch en runs subsiguientes; LLM solo se invoca si plan cambia.
 

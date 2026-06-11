@@ -122,4 +122,34 @@ describe('callAgentLLM retry loop', () => {
     ).rejects.toThrow('bad schema');
     expect(generateObjectMock).toHaveBeenCalledTimes(1);
   });
+
+  it('tames gpt-5: minimal reasoning effort, no temperature', async () => {
+    generateObjectMock.mockResolvedValueOnce(okResult());
+    await callAgentLLM({
+      agent: 'programador',
+      model: 'openai/gpt-5',
+      systemPrefix: 'sys',
+      userInput: '{"x":1}',
+      schema,
+      temperature: 0.2,
+    });
+    const args = generateObjectMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(args.temperature).toBeUndefined();
+    expect(args.providerOptions).toMatchObject({ openai: { reasoningEffort: 'minimal' } });
+  });
+
+  it('keeps temperature and skips openai options for anthropic models', async () => {
+    generateObjectMock.mockResolvedValueOnce(okResult());
+    await callAgentLLM({
+      agent: 'clasificador',
+      model: 'anthropic/claude-haiku-4-5',
+      systemPrefix: 'sys',
+      userInput: '{"x":1}',
+      schema,
+      temperature: 0.1,
+    });
+    const args = generateObjectMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(args.temperature).toBe(0.1);
+    expect((args.providerOptions as Record<string, unknown>).openai).toBeUndefined();
+  });
 }, 30_000);

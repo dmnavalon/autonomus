@@ -32,12 +32,13 @@ describe('router', () => {
     expect(chooseModel('reparador', { repairAttempt: 5 }).reasoningEnabled).toBe(true);
   });
 
-  it('mid tier is not a reasoning model (gpt-5 starves JSON output under tight caps)', () => {
-    // Regression for issue #5: gpt-5 burns maxOutputTokens on reasoning and
-    // generateObject gets nothing back. Mid tier must stay on a plain model.
-    const c = chooseModel('planificador');
-    expect(c.tier).toBe('mid');
-    expect(c.model).not.toMatch(/^openai\/gpt-5$/);
-    expect(c.model).toMatch(/sonnet/);
+  it('all tiers resolve to free-tier-accessible gateway models', () => {
+    // Gateway free tier (probed 2026-06-10 via gateway-diag.yml): only
+    // haiku-4-5 and gpt-5 return 200; sonnet/opus are 403, the rest 429.
+    const accessible = ['anthropic/claude-haiku-4-5', 'openai/gpt-5'];
+    expect(accessible).toContain(chooseModel('clasificador').model);
+    expect(accessible).toContain(chooseModel('planificador').model);
+    expect(accessible).toContain(chooseModel('programador').model);
+    expect(accessible).toContain(chooseModel('reparador').model);
   });
 });

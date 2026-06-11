@@ -86,7 +86,7 @@ Implementación: `packages/orchestrator/src/agents/programador.ts` (LLM strong t
 - NO modificar `agents/`, `prompts/`, `.github/workflows/`, `registry/users.json`, `vercel.ts` ni nada del repo `dmnavalon/autonomus`. Edita el repo target.
 - NO leer ni commitear `.env*`. NO inline secrets.
 - NO push a `main`. NO force-push.
-- **Token budget**: input ≤ 16,000 / output ≤ 4,000 / model tier `strong` (Opus).
+- **Token budget**: input ≤ 16,000 / output ≤ 6,000 / model tier `strong`.
 
 ## Protocolo de comunicación
 
@@ -188,7 +188,7 @@ Implement the spec on a `factory/<issue-number>` branch. Open a Pull Request whe
 ## Reglas de eficiencia de tokens
 
 - Input cap: 16,000 tokens.
-- Output cap: 4,000 tokens.
+- Output cap: 6,000 tokens.
 - Model tier: `strong` (Opus) siempre.
 - Prompt prefix cacheable.
 - Output diffs unificados (`git diff --unified=3`), no archivos completos.

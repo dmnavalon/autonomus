@@ -4,13 +4,16 @@
  */
 import type { AgentName, ModelTier, Complejidad, Riesgo } from './types.js';
 
+// Free-tier reality of our AI Gateway key (probed via gateway-diag.yml on
+// 2026-06-10): only haiku-4-5 and gpt-5 return 200; sonnet/opus are 403 and
+// everything else is free-tier rate-limited (429). gpt-5 is a reasoning model,
+// so llm.ts forces reasoningEffort=minimal and omits temperature for it —
+// otherwise reasoning tokens starve maxOutputTokens and generateObject gets
+// nothing back (issue #5 root cause).
 const MODEL_BY_TIER: Record<ModelTier, string> = {
   cheap: process.env.MODEL_CHEAP  ?? 'anthropic/claude-haiku-4-5',
-  // mid must NOT be a reasoning model: reasoning tokens count against
-  // maxOutputTokens, and with caps like planificador's they starve the JSON
-  // output entirely → NoObjectGeneratedError (see issue #5).
-  mid:   process.env.MODEL_MID    ?? 'anthropic/claude-sonnet-4-6',
-  strong: process.env.MODEL_STRONG ?? 'anthropic/claude-opus-4-7',
+  mid:   process.env.MODEL_MID    ?? 'openai/gpt-5',
+  strong: process.env.MODEL_STRONG ?? 'openai/gpt-5',
 };
 
 const DEFAULT_TIER: Record<AgentName, ModelTier> = {

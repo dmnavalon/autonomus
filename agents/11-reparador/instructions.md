@@ -85,7 +85,7 @@ Implementación: `packages/orchestrator/src/agents/reparador.ts` (LLM strong; re
 - NO modifica `agents/`, `prompts/`, `.github/workflows/`, `.env*`, ni el repo `dmnavalon/autonomus`.
 - NO chase coverage; tests solo si fix afecta UX.
 - Si diagnosis es incorrecta o no reproducible → error `diagnosis_unactionable`.
-- **Token budget**: input ≤ 12,000 / output ≤ 3,000 / model tier `strong`. `reasoning_enabled=true` SOLO si attempt ≥ 3.
+- **Token budget**: input ≤ 12,000 / output ≤ 5,000 / model tier `strong`. `reasoning_enabled=true` SOLO si attempt ≥ 3.
 
 ## Protocolo de comunicación
 
@@ -172,7 +172,7 @@ Reglas operativas del LLM (preservadas de Phase 0):
 ## Reglas de eficiencia de tokens
 
 - Input cap: 12,000 tokens.
-- Output cap: 3,000 tokens.
+- Output cap: 5,000 tokens.
 - Model tier: `strong`.
 - `reasoning_enabled=true` SOLO si `intento ≥ 3` (regla en `router.ts`).
 - Prompt prefix cacheable.
