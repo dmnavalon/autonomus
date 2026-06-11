@@ -56,25 +56,39 @@ export interface WaitOptions {
   pollIntervalMs: number;
 }
 
+export interface WaitResult {
+  deployment: VercelDeployment | null;
+  /** Last poll error, if any — an expired VERCEL_TOKEN looks identical to a
+   * missing deployment otherwise (every poll throws and is swallowed). */
+  lastError: string | null;
+}
+
 /**
  * Polls until a Vercel deployment for the given branch reaches state READY or ERROR.
- * Returns the deployment, or null if the timeout expired with no deployment found.
+ * `deployment` is null if the timeout expired with no deployment found.
  */
 export async function waitForBranchDeployment(
   projectId: string,
   branch: string,
   opts: WaitOptions = { timeoutMs: 10 * 60_000, pollIntervalMs: 15_000 },
-): Promise<VercelDeployment | null> {
+): Promise<WaitResult> {
   const deadline = Date.now() + opts.timeoutMs;
+  let lastError: string | null = null;
   while (Date.now() < deadline) {
-    const ds = await listDeployments(projectId, branch).catch(() => []);
+    let ds: VercelDeployment[] = [];
+    try {
+      ds = await listDeployments(projectId, branch);
+      lastError = null;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
     const newest = ds[0];
     if (newest && (newest.state === 'READY' || newest.state === 'ERROR' || newest.state === 'CANCELED')) {
-      return newest;
+      return { deployment: newest, lastError: null };
     }
     await sleep(opts.pollIntervalMs);
   }
-  return null;
+  return { deployment: null, lastError };
 }
 
 function sleep(ms: number): Promise<void> {

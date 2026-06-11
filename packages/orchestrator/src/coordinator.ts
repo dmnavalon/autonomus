@@ -337,9 +337,15 @@ async function runIntakeAndPlanning(issue: IssueSnapshot, ledger: JobLedger): Pr
   }
 
   await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:waiting-preview');
-  const deployment = await waitForBranchDeployment(app.vercel_project_id, programmerResult.branch);
+  const wait = await waitForBranchDeployment(app.vercel_project_id, programmerResult.branch);
+  const deployment = wait.deployment;
   if (!deployment) {
-    await commentOnIssue(issueNumber, '> Coordinator: timeout esperando Vercel deployment para la branch.');
+    await commentOnIssue(
+      issueNumber,
+      wait.lastError
+        ? `> Coordinator: timeout esperando Vercel deployment para la branch. Último error del poll: \`${wait.lastError.slice(0, 200)}\``
+        : '> Coordinator: timeout esperando Vercel deployment para la branch (sin errores de API; ¿el proyecto Vercel está conectado al repo?).',
+    );
     await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
     await postLedger(issueNumber, ledger);
     return { finalState: 'state:failed-needs-human', ledger };
@@ -840,7 +846,7 @@ async function runQAPipeline(args: QAPipelineArgs): Promise<{ finalState: string
         issueNumber,
         `> Coordinator: esperando Vercel re-deploy del commit \`${newCommitSha.slice(0, 7)}\``,
       );
-      const newDeploy = await waitForBranchDeployment(args.vercelProjectId, currentBranch);
+      const { deployment: newDeploy } = await waitForBranchDeployment(args.vercelProjectId, currentBranch);
       if (!newDeploy || newDeploy.state !== 'READY') {
         await transitionState(issueNumber, await refreshLabels(issueNumber), 'state:failed-needs-human');
         await notifyTerminal(issueNumber, false, {
