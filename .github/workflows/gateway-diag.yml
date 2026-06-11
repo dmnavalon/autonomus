@@ -1,0 +1,45 @@
+name: Gateway Diag
+
+# Manual diagnostic: which models does our AI Gateway key actually have access
+# to on the current (free) tier? Prints HTTP status + error snippet per model.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe models
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+        run: |
+          MODELS=(
+            "anthropic/claude-haiku-4-5"
+            "anthropic/claude-sonnet-4-6"
+            "anthropic/claude-sonnet-4-5"
+            "anthropic/claude-opus-4-7"
+            "openai/gpt-5"
+            "openai/gpt-5-mini"
+            "openai/gpt-5-nano"
+            "openai/gpt-4.1"
+            "openai/gpt-4o-mini"
+            "google/gemini-2.5-pro"
+            "google/gemini-2.5-flash"
+            "xai/grok-4-fast-non-reasoning"
+            "zai/glm-4.6"
+            "moonshotai/kimi-k2"
+            "deepseek/deepseek-v3.2-exp"
+          )
+          for M in "${MODELS[@]}"; do
+            BODY=$(jq -n --arg m "$M" '{model:$m, max_tokens: 1000, messages:[{role:"user", content:"Reply with exactly: ok"}]}')
+            RESP=$(curl -s -w "\n%{http_code}" -X POST "https://ai-gateway.vercel.sh/v1/chat/completions" \
+              -H "Authorization: Bearer $AI_GATEWAY_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$BODY")
+            CODE=$(echo "$RESP" | tail -1)
+            SNIPPET=$(echo "$RESP" | head -1 | cut -c1-160)
+            echo "MODEL=$M STATUS=$CODE :: $SNIPPET"
+          done
