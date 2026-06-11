@@ -20,12 +20,15 @@ export const AGENT_CAPS: Record<AgentName, AgentCap> = {
   planificador: { inputTokens: 4_000, outputTokens: 2_000 },
   arquitecto: { inputTokens: 6_000, outputTokens: 2_000 },
   router: { inputTokens: 1_500, outputTokens: 200 },
-  programador: { inputTokens: 16_000, outputTokens: 6_000 },
+  // The Programmer/Repairer emit COMPLETE files: a 400-line component alone is
+  // ~4k tokens, so whole-file output needs real headroom or the JSON truncates
+  // mid-string ("could not parse the response", issue #16).
+  programador: { inputTokens: 16_000, outputTokens: 12_000 },
   revisor_codigo: { inputTokens: 8_000, outputTokens: 600 },
   qa_planner: { inputTokens: 3_000, outputTokens: 600 },
   playwright: { inputTokens: 3_000, outputTokens: 2_500 },
   analista_logs: { inputTokens: 6_000, outputTokens: 1_500 },
-  reparador: { inputTokens: 12_000, outputTokens: 5_000 },
+  reparador: { inputTokens: 12_000, outputTokens: 8_000 },
   verificador: { inputTokens: 1_500, outputTokens: 200 },
   // Doc-maestro additions
   coordinador:           { inputTokens: 0,     outputTokens: 0 }, // deterministic

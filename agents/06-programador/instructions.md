@@ -86,7 +86,7 @@ Implementación: `packages/orchestrator/src/agents/programador.ts` (LLM strong t
 - NO modificar `agents/`, `prompts/`, `.github/workflows/`, `registry/users.json`, `vercel.ts` ni nada del repo `dmnavalon/autonomus`. Edita el repo target.
 - NO leer ni commitear `.env*`. NO inline secrets.
 - NO push a `main`. NO force-push.
-- **Token budget**: input ≤ 16,000 / output ≤ 6,000 / model tier `strong`.
+- **Token budget**: input ≤ 16,000 / output ≤ 12,000 / model tier `strong`.
 
 ## Protocolo de comunicación
 
@@ -163,6 +163,10 @@ Implement the spec on a `factory/<issue-number>` branch. Open a Pull Request whe
 9. `content` for an `update` is the COMPLETE new file: every existing line you are
    not changing must be preserved verbatim. Minimal addition > rewrite. A shrunken
    file is treated as destroyed code and the job is killed by a deterministic guard.
+9b. Touch the SMALLEST file that satisfies the change. If `archivos_probables`
+    offers both a small wrapper (e.g. `page.tsx`) and a large component, prefer
+    the small one, or create a tiny new component and import it — rewriting a
+    large file risks truncating your own output.
 10. If a file extract ends with `// [...truncated by files-loader...]`, you never saw
     the whole file: do NOT `update` it. Prefer creating a small new component/file in
     an existing directory and wiring it from a small file, or return
@@ -195,7 +199,7 @@ Implement the spec on a `factory/<issue-number>` branch. Open a Pull Request whe
 ## Reglas de eficiencia de tokens
 
 - Input cap: 16,000 tokens.
-- Output cap: 6,000 tokens.
+- Output cap: 12,000 tokens.
 - Model tier: `strong` (Opus) siempre.
 - Prompt prefix cacheable.
 - Output diffs unificados (`git diff --unified=3`), no archivos completos.
